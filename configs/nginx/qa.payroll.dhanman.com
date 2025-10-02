@@ -1,0 +1,1 @@
+/etc/nginx/sites-available/qa.payroll.dhanman.com

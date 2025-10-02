@@ -1,0 +1,1 @@
+/etc/nginx/sites-available/prom.dhanman.com

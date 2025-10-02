@@ -1,0 +1,1 @@
+/etc/nginx/sites-available/test.sales.dhanman.com

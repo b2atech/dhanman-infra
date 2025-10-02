@@ -1,0 +1,1 @@
+/etc/nginx/sites-available/prod.purchase.dhanman.com
