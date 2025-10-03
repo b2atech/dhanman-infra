@@ -1,0 +1,3 @@
+- name: node_exporter role placeholder
+  debug:
+    msg: "node_exporter role running - placeholder only"

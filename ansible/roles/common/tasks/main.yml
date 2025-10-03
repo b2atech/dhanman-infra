@@ -1,0 +1,3 @@
+- name: common role placeholder
+  debug:
+    msg: "common role running - placeholder only"

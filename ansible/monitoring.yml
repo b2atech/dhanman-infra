@@ -1,0 +1,11 @@
+---
+- name: Setup Monitoring Stack (Grafana + Loki + Promtail + Node Exporter)
+  hosts: all
+  become: true
+
+  roles:
+    - common
+    - node_exporter
+    - loki
+    - promtail
+    - grafana

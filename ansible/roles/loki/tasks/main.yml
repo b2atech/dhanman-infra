@@ -1,0 +1,3 @@
+- name: loki role placeholder
+  debug:
+    msg: "loki role running - placeholder only"
