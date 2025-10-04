@@ -1,0 +1,4 @@
+---
+- name: restart loki
+  ansible.builtin.shell: |
+    docker compose -f /opt/loki/docker-compose.yml restart loki

@@ -1,3 +1,22 @@
-- name: loki role placeholder
-  debug:
-    msg: "loki role running - placeholder only"
+---
+- name: Ensure Loki docker-compose file is in place
+  copy:
+    src: docker-compose.yml
+    dest: /home/ubuntu/loki-stack/docker-compose.yml
+    owner: ubuntu
+    group: ubuntu
+    mode: '0644'
+
+- name: Ensure loki-stack directory exists
+  file:
+    path: /home/ubuntu/loki-stack
+    state: directory
+    owner: ubuntu
+    group: ubuntu
+    mode: '0755'
+
+- name: Run Loki docker-compose
+  become: true
+  command: docker compose -f /home/ubuntu/loki-stack/docker-compose.yml up -d
+  args:
+    chdir: /home/ubuntu/loki-stack

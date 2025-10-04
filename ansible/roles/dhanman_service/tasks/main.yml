@@ -1,0 +1,24 @@
+---
+- name: Ensure service directory exists
+  ansible.builtin.file:
+    path: "/var/www/qa/{{ service_name }}"
+    state: directory
+    owner: ubuntu
+    group: ubuntu
+    mode: '0755'
+
+- name: Copy environment file
+  ansible.builtin.template:
+    src: env.j2
+    dest: "/var/www/qa/{{ service_name }}/.env"
+    mode: '0644'
+
+- name: Copy docker-compose file
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "/var/www/qa/{{ service_name }}/docker-compose.yml"
+    mode: '0644'
+
+- name: Start service with Docker Compose
+  ansible.builtin.shell: |
+    docker compose -f /var/www/qa/{{ service_name }}/docker-compose.yml up -d

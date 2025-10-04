@@ -1,0 +1,4 @@
+---
+- name: restart promtail
+  ansible.builtin.shell: |
+    docker compose -f /opt/promtail/docker-compose.yml restart promtail

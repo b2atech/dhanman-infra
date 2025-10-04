@@ -1,0 +1,33 @@
+- name: Ensure service directories exist
+  ansible.builtin.file:
+    path: "/var/www/qa/{{ item.name }}"
+    state: directory
+    owner: ubuntu
+    group: ubuntu
+    mode: '0755'
+  loop: "{{ services }}"
+
+- name: Copy environment files
+  ansible.builtin.template:
+    src: env.j2
+    dest: "/var/www/qa/{{ item.name }}/.env"
+    mode: '0644'
+  loop: "{{ services }}"
+
+- name: Install systemd units
+  ansible.builtin.template:
+    src: service.unit.j2
+    dest: "/etc/systemd/system/{{ item.name }}-qa.service"
+    mode: '0644'
+  loop: "{{ services }}"
+
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: yes
+
+- name: Enable and restart services
+  ansible.builtin.systemd:
+    name: "{{ item.name }}-qa"
+    enabled: yes
+    state: restarted
+  loop: "{{ services }}"

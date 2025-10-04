@@ -1,0 +1,7 @@
+---
+- name: Deploy Loki to QA
+  hosts: dhanman_qa
+  become: true
+
+  roles:
+    - loki

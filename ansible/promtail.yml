@@ -1,0 +1,8 @@
+---
+- name: Setup Promtail
+  hosts: dhanman-qa
+  become: true
+
+  roles:
+    - docker
+    - promtail

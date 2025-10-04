@@ -1,0 +1,12 @@
+- hosts: dhanman-qa
+  become: yes
+  vars:
+    service_name: "dhanman-common"
+    dll_name: "Dhanman.Common.Api.dll"
+    env: "qa"
+    common_db: "Server=az-dhanman-qa.postgres.database.azure.com;Port=5432;Database=qa-dhanman-common;User Id=dhanmanqa;Password=B@dhi$123;"
+    permissions_db: "Server=az-dhanman-qa.postgres.database.azure.com;Port=5432;Database=qa-dhanman-common;User Id=dhanmanqa;Password=B@dhi$123;"
+    service_db: "Server=az-dhanman-qa.postgres.database.azure.com;Port=5432;Database=qa-dhanman-common;User Id=dhanmanqa;Password=B@dhi$123;"
+
+  roles:
+    - role: dhanman_systemd_service

@@ -1,0 +1,14 @@
+[Unit]
+Description={{ item.name }} service (qa)
+After=network.target
+
+[Service]
+WorkingDirectory=/var/www/qa/{{ item.name }}
+ExecStart=/usr/bin/dotnet /var/www/qa/{{ item.name }}/{{ item.dll }}
+EnvironmentFile=/var/www/qa/{{ item.name }}/.env
+Restart=always
+RestartSec=10
+SyslogIdentifier={{ item.name }}
+
+[Install]
+WantedBy=multi-user.target

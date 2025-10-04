@@ -1,3 +1,14 @@
-- name: grafana role placeholder
-  debug:
-    msg: "grafana role running - placeholder only"
+- name: Create Grafana provisioning directories
+  ansible.builtin.file:
+    path: "/opt/grafana/provisioning/datasources"
+    state: directory
+    owner: 472
+    group: 472
+    mode: '0755'
+
+- name: Provision Prometheus datasource
+  ansible.builtin.template:
+    src: prometheus-datasource.yml.j2
+    dest: /opt/grafana/provisioning/datasources/prometheus-datasource.yml
+    mode: '0644'
+  notify: restart grafana

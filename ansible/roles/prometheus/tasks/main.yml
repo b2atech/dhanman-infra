@@ -1,0 +1,35 @@
+---
+- name: Create Prometheus data directory
+  ansible.builtin.file:
+    path: /opt/prometheus/data
+    state: directory
+    owner: 65534
+    group: 65534
+    mode: '0755'
+
+- name: Copy Prometheus config
+  ansible.builtin.template:
+    src: prometheus.yml.j2
+    dest: /opt/prometheus/prometheus.yml
+    mode: '0644'
+
+- name: Create Docker Compose for Prometheus
+  ansible.builtin.copy:
+    dest: /opt/prometheus/docker-compose.yml
+    content: |
+      version: '3'
+      services:
+        prometheus:
+          image: prom/prometheus:latest
+          container_name: prometheus
+          volumes:
+            - /opt/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+            - /opt/prometheus/data:/prometheus
+          ports:
+            - "9090:9090"
+          restart: always
+    mode: '0644'
+
+- name: Start Prometheus with Docker Compose
+  ansible.builtin.shell: |
+    docker compose -f /opt/prometheus/docker-compose.yml up -d

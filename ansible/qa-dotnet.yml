@@ -1,0 +1,4 @@
+- hosts: dhanman-qa
+  become: yes
+  roles:
+    - role: dotnet

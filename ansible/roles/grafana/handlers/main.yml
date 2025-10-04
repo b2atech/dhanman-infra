@@ -1,0 +1,4 @@
+---
+- name: restart grafana
+  ansible.builtin.shell: |
+    docker compose -f /opt/grafana/docker-compose.yml restart grafana

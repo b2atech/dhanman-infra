@@ -1,0 +1,5 @@
+- hosts: dhanman-qa
+  become: yes
+  roles:
+    - dhanman_systemd_service
+    - nginx

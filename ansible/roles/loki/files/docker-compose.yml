@@ -1,0 +1,38 @@
+---
+version: '3'
+
+services:
+  loki:
+    image: grafana/loki:latest
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./loki:/etc/loki
+      - ./loki/chunks:/tmp/loki/chunks
+      - ./loki/index:/tmp/loki/index
+      - ./loki/cache:/tmp/loki/cache
+      - ./loki/compactor:/tmp/loki/compactor
+      - ./loki/wal:/wal
+
+  promtail:
+    image: grafana/promtail:2.9.0
+    volumes:
+      - ./promtail-config.yaml:/etc/promtail/config.yaml
+      - /var/log:/var/log
+      - /var/www:/var/www
+    command: -config.file=/etc/promtail/config.yaml
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    depends_on:
+      - loki
+
+volumes:
+  grafana-storage:
+    external: true
+    name: loki-stack_grafana-storage

@@ -1,0 +1,24 @@
+---
+- name: Download Microsoft package repository
+  ansible.builtin.get_url:
+    url: https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb
+    dest: /tmp/packages-microsoft-prod.deb
+
+- name: Install Microsoft repository package
+  ansible.builtin.apt:
+    deb: /tmp/packages-microsoft-prod.deb
+  become: yes
+
+- name: Install .NET 9 runtime (console apps)
+  ansible.builtin.apt:
+    name: dotnet-runtime-9.0
+    state: present
+    update_cache: yes
+  become: yes
+
+- name: Install ASP.NET Core Runtime (for web APIs)
+  ansible.builtin.apt:
+    name: aspnetcore-runtime-9.0
+    state: present
+    update_cache: yes
+  become: yes

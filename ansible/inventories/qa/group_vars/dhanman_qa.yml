@@ -1,0 +1,48 @@
+services:
+  - name: dhanman-common
+    dll: Dhanman.Common.Api.dll
+    port: 5200
+    domain: qa.common.dhanman.com
+    common_db: "Server=db.qa.dhanman.com;Port=5432;Database=qa-dhanman-common;User Id=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;"
+    permissions_db: "Server=db.qa.dhanman.com;Port=5432;Database=qa-dhanman-common;User Id=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;"
+    template_db: "Server=db.qa.dhanman.com;Port=5432;Database=qa-dhanman-common;User Id=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;"
+
+  - name: dhanman-sales
+    dll: Dhanman.Sales.Api.dll
+    port: 5201
+    domain: qa.sales.dhanman.com
+    common_db: "Server=db.qa.dhanman.com;Port=5432;Database=qa-dhanman-common;User Id=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;"
+    permissions_db: "Server=db.qa.dhanman.com;Port=5432;Database=qa-dhanman-common;User Id=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;"
+    service_db: "Server=db.qa.dhanman.com;Port=5432;Database=qa-dhanman-sales;User Id=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;"
+
+  - name: dhanman-purchase
+    dll: Dhanman.Purchase.Api.dll
+    port: 5202
+    domain: qa.purchase.dhanman.com
+    common_db: "Server=db.qa.dhanman.com;Port=5432;Database=qa-dhanman-common;User Id=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;"
+    permissions_db: "Server=db.qa.dhanman.com;Port=5432;Database=qa-dhanman-common;User Id=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;"
+    service_db: "Server=db.qa.dhanman.com;Port=5432;Database=qa-dhanman-purchase;User Id=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;"
+
+  - name: dhanman-payroll
+    dll: Dhanman.Payroll.Api.dll
+    port: 5203
+    domain: qa.payroll.dhanman.com
+    common_db: "Server=db.qa.dhanman.com;Port=5432;Database=qa-dhanman-common;User Id=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;"
+    permissions_db: "Server=db.qa.dhanman.com;Port=5432;Database=qa-dhanman-common;User Id=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;"
+    service_db: "Server=db.qa.dhanman.com;Port=5432;Database=qa-dhanman-payroll;User Id=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;"
+
+  - name: dhanman-inventory
+    dll: Dhanman.Inventory.Api.dll
+    port: 5204
+    domain: qa.inventory.dhanman.com
+    common_db: "Server=db.qa.dhanman.com;Port=5432;Database=qa-dhanman-common;User Id=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;"
+    permissions_db: "Server=db.qa.dhanman.com;Port=5432;Database=qa-dhanman-common;User Id=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;"
+    service_db: "Server=db.qa.dhanman.com;Port=5432;Database=qa-dhanman-inventory;User Id=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;"
+
+  - name: dhanman-community
+    dll: Dhanman.MyHome.Api.dll
+    port: 5205
+    domain: qa.community.dhanman.com
+    common_db: "Server=db.qa.dhanman.com;Port=5432;Database=qa-dhanman-common;User Id=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;"
+    permissions_db: "Server=db.qa.dhanman.com;Port=5432;Database=qa-dhanman-common;User Id=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;"
+    service_db: "Server=db.qa.dhanman.com;Port=5432;Database=qa-dhanman-community;User Id=dhanmanqa;Password=AVNS_-rf14vlRWutEhqlhvYS;"

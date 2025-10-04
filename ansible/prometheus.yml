@@ -1,0 +1,5 @@
+- name: Install Prometheus on QA
+  hosts: dhanman-qa
+  become: true
+  roles:
+    - prometheus

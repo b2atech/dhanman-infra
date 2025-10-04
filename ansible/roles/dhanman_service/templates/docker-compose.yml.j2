@@ -1,0 +1,12 @@
+version: '3.8'
+services:
+  {{ service_name }}:
+    image: "{{ docker_image }}"
+    container_name: "{{ service_name }}"
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "{{ service_port }}:80"
+    volumes:
+      - /var/www/qa/logs:/logs

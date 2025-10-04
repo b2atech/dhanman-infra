@@ -1,0 +1,22 @@
+- name: Install NGINX and Certbot
+  apt:
+    name:
+      - nginx
+      - python3-certbot-nginx
+    state: present
+    update_cache: yes
+
+- name: Deploy NGINX site configs
+  template:
+    src: nginx-site.conf.j2
+    dest: "/etc/nginx/sites-available/{{ item.name }}.conf"
+  loop: "{{ services }}"
+  notify: Reload nginx
+
+- name: Enable site configs
+  file:
+    src: "/etc/nginx/sites-available/{{ item.name }}.conf"
+    dest: "/etc/nginx/sites-enabled/{{ item.name }}.conf"
+    state: link
+  loop: "{{ services }}"
+  notify: Reload nginx

@@ -1,3 +1,1 @@
 - name: promtail role placeholder
-  debug:
-    msg: "promtail role running - placeholder only"

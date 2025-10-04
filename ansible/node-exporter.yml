@@ -1,0 +1,5 @@
+- name: Install Node Exporter on QA
+  hosts: dhanman-qa
+  become: true
+  roles:
+    - node_exporter

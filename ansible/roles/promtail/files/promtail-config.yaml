@@ -1,0 +1,41 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+    batchsize: 1048576
+    batchwait: 5s
+    timeout: 10s
+
+scrape_configs:
+  - job_name: dhanman-logs
+    pipeline_stages:
+      - regex:
+          expression: 'dhanman-(?P<service_name>[^-]+)-\d+\.log'
+          source: filename
+
+      - labels:
+          service_name: ""
+
+      - static_labels:
+          log_type: "application"
+
+    static_configs:
+      - targets: [localhost]
+        labels:
+          env: qa
+          __path__: /var/www/qa/logs/dhanman-*.log
+
+      - targets: [localhost]
+        labels:
+          env: prod
+          __path__: /var/www/prod/logs/dhanman-*.log
+
+      - targets: [localhost]
+        labels:
+          env: test
+          __path__: /var/www/test/logs/dhanman-*.log
