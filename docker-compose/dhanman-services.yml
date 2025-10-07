@@ -1,0 +1,130 @@
+version: '3.8'
+
+services:
+  dhanman-common:
+    image: ghcr.io/b2atech/dhanman-common:latest
+    container_name: dhanman-common
+    restart: always
+    ports:
+      - "5200:80"
+    env_file:
+      - ./env/common.env
+    volumes:
+      - /var/www/logs/common:/logs
+    networks:
+      - dhanman-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  dhanman-sales:
+    image: ghcr.io/b2atech/dhanman-sales:latest
+    container_name: dhanman-sales
+    restart: always
+    ports:
+      - "5201:80"
+    env_file:
+      - ./env/sales.env
+    volumes:
+      - /var/www/logs/sales:/logs
+    networks:
+      - dhanman-network
+    depends_on:
+      - dhanman-common
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  dhanman-purchase:
+    image: ghcr.io/b2atech/dhanman-purchase:latest
+    container_name: dhanman-purchase
+    restart: always
+    ports:
+      - "5202:80"
+    env_file:
+      - ./env/purchase.env
+    volumes:
+      - /var/www/logs/purchase:/logs
+    networks:
+      - dhanman-network
+    depends_on:
+      - dhanman-common
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  dhanman-payroll:
+    image: ghcr.io/b2atech/dhanman-payroll:latest
+    container_name: dhanman-payroll
+    restart: always
+    ports:
+      - "5203:80"
+    env_file:
+      - ./env/payroll.env
+    volumes:
+      - /var/www/logs/payroll:/logs
+    networks:
+      - dhanman-network
+    depends_on:
+      - dhanman-common
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  dhanman-inventory:
+    image: ghcr.io/b2atech/dhanman-inventory:latest
+    container_name: dhanman-inventory
+    restart: always
+    ports:
+      - "5204:80"
+    env_file:
+      - ./env/inventory.env
+    volumes:
+      - /var/www/logs/inventory:/logs
+    networks:
+      - dhanman-network
+    depends_on:
+      - dhanman-common
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  dhanman-community:
+    image: ghcr.io/b2atech/dhanman-community:latest
+    container_name: dhanman-community
+    restart: always
+    ports:
+      - "5205:80"
+    env_file:
+      - ./env/community.env
+    volumes:
+      - /var/www/logs/community:/logs
+    networks:
+      - dhanman-network
+    depends_on:
+      - dhanman-common
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  dhanman-network:
+    driver: bridge

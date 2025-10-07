@@ -1,0 +1,131 @@
+pipeline {
+    agent any
+    
+    environment {
+        // GitHub Container Registry Configuration
+        REGISTRY = 'ghcr.io'
+        REGISTRY_NAMESPACE = 'b2atech'
+        IMAGE_NAME = 'dhanman-SERVICE_NAME' // Replace SERVICE_NAME with: common, sales, purchase, payroll, inventory, or community
+        
+        // Credentials stored in Jenkins
+        GHCR_CREDENTIALS = credentials('github-container-registry')
+        
+        // Build configuration
+        DOTNET_VERSION = '8.0'
+        PROJECT_PATH = 'src/Dhanman.SERVICE_NAME.Api' // Update with actual project path
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        
+        stage('Setup .NET') {
+            steps {
+                sh '''
+                    dotnet --version
+                '''
+            }
+        }
+        
+        stage('Restore Dependencies') {
+            steps {
+                sh '''
+                    dotnet restore
+                '''
+            }
+        }
+        
+        stage('Build') {
+            steps {
+                sh '''
+                    dotnet build --configuration Release --no-restore
+                '''
+            }
+        }
+        
+        stage('Test') {
+            steps {
+                sh '''
+                    dotnet test --configuration Release --no-build --verbosity normal
+                '''
+            }
+        }
+        
+        stage('Publish') {
+            steps {
+                sh '''
+                    dotnet publish ${PROJECT_PATH}/${IMAGE_NAME}.csproj \
+                        --configuration Release \
+                        --output ./publish \
+                        --no-build
+                '''
+            }
+        }
+        
+        stage('Docker Build') {
+            steps {
+                script {
+                    // Generate image tag based on branch and build number
+                    def imageTag = "${env.BRANCH_NAME}-${env.BUILD_NUMBER}"
+                    def imageFull = "${REGISTRY}/${REGISTRY_NAMESPACE}/${IMAGE_NAME}:${imageTag}"
+                    def imageLatest = "${REGISTRY}/${REGISTRY_NAMESPACE}/${IMAGE_NAME}:latest"
+                    
+                    sh """
+                        docker build \
+                            -t ${imageFull} \
+                            -t ${imageLatest} \
+                            -f Dockerfile \
+                            .
+                    """
+                    
+                    // Store for use in push stage
+                    env.IMAGE_TAG = imageTag
+                    env.IMAGE_FULL = imageFull
+                    env.IMAGE_LATEST = imageLatest
+                }
+            }
+        }
+        
+        stage('Docker Login') {
+            steps {
+                sh '''
+                    echo $GHCR_CREDENTIALS_PSW | docker login ${REGISTRY} -u $GHCR_CREDENTIALS_USR --password-stdin
+                '''
+            }
+        }
+        
+        stage('Docker Push') {
+            steps {
+                sh """
+                    docker push ${IMAGE_FULL}
+                    docker push ${IMAGE_LATEST}
+                """
+            }
+        }
+        
+        stage('Cleanup') {
+            steps {
+                sh '''
+                    docker logout ${REGISTRY}
+                    docker image prune -f
+                '''
+            }
+        }
+    }
+    
+    post {
+        success {
+            echo "✅ Successfully built and pushed ${IMAGE_NAME}:${IMAGE_TAG}"
+            echo "Image available at: ${REGISTRY}/${REGISTRY_NAMESPACE}/${IMAGE_NAME}"
+        }
+        failure {
+            echo "❌ Build or push failed for ${IMAGE_NAME}"
+        }
+        always {
+            cleanWs()
+        }
+    }
+}
