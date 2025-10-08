@@ -19,6 +19,16 @@
     dest: "/var/www/qa/{{ service_name }}/docker-compose.yml"
     mode: '0644'
 
+- name: Login to GitHub Container Registry
+  ansible.builtin.shell: |
+    echo "{{ ghcr_token }}" | docker login ghcr.io -u "{{ ghcr_username }}" --password-stdin
+  when: ghcr_token is defined and ghcr_username is defined
+  no_log: true
+
+- name: Pull latest Docker image
+  ansible.builtin.shell: |
+    docker compose -f /var/www/qa/{{ service_name }}/docker-compose.yml pull
+
 - name: Start service with Docker Compose
   ansible.builtin.shell: |
     docker compose -f /var/www/qa/{{ service_name }}/docker-compose.yml up -d

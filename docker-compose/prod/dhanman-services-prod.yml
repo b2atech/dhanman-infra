@@ -1,0 +1,183 @@
+version: '3.8'
+
+services:
+  dhanman-common:
+    image: ghcr.io/b2atech/dhanman-common:v1.0.0
+    container_name: dhanman-common-prod
+    restart: always
+    ports:
+      - "5200:80"
+    env_file:
+      - ./env/common.env
+    volumes:
+      - /var/www/prod/logs/common:/logs
+    networks:
+      - dhanman-prod-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  dhanman-sales:
+    image: ghcr.io/b2atech/dhanman-sales:v1.0.0
+    container_name: dhanman-sales-prod
+    restart: always
+    ports:
+      - "5201:80"
+    env_file:
+      - ./env/sales.env
+    volumes:
+      - /var/www/prod/logs/sales:/logs
+    networks:
+      - dhanman-prod-network
+    depends_on:
+      dhanman-common:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  dhanman-purchase:
+    image: ghcr.io/b2atech/dhanman-purchase:v1.0.0
+    container_name: dhanman-purchase-prod
+    restart: always
+    ports:
+      - "5202:80"
+    env_file:
+      - ./env/purchase.env
+    volumes:
+      - /var/www/prod/logs/purchase:/logs
+    networks:
+      - dhanman-prod-network
+    depends_on:
+      dhanman-common:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  dhanman-payroll:
+    image: ghcr.io/b2atech/dhanman-payroll:v1.0.0
+    container_name: dhanman-payroll-prod
+    restart: always
+    ports:
+      - "5203:80"
+    env_file:
+      - ./env/payroll.env
+    volumes:
+      - /var/www/prod/logs/payroll:/logs
+    networks:
+      - dhanman-prod-network
+    depends_on:
+      dhanman-common:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  dhanman-inventory:
+    image: ghcr.io/b2atech/dhanman-inventory:v1.0.0
+    container_name: dhanman-inventory-prod
+    restart: always
+    ports:
+      - "5204:80"
+    env_file:
+      - ./env/inventory.env
+    volumes:
+      - /var/www/prod/logs/inventory:/logs
+    networks:
+      - dhanman-prod-network
+    depends_on:
+      dhanman-common:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  dhanman-community:
+    image: ghcr.io/b2atech/dhanman-community:v1.0.0
+    container_name: dhanman-community-prod
+    restart: always
+    ports:
+      - "5205:80"
+    env_file:
+      - ./env/community.env
+    volumes:
+      - /var/www/prod/logs/community:/logs
+    networks:
+      - dhanman-prod-network
+    depends_on:
+      dhanman-common:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+networks:
+  dhanman-prod-network:
+    driver: bridge
