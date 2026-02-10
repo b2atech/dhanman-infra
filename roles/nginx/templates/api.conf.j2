@@ -1,0 +1,46 @@
+# Nginx configuration for Dhanman API - {{ item.name }}
+# API Service on port {{ item.port }}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name {{ item.name }}.dhanman.com;
+
+    # Redirect HTTP to HTTPS
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name {{ item.name }}.dhanman.com;
+
+    # SSL certificate paths (to be configured with certbot)
+    ssl_certificate {{ tls_cert_path }}/{{ item.name }}.{{ tls_cert_domain }}/fullchain.pem;
+    ssl_certificate_key {{ tls_cert_path }}/{{ item.name }}.{{ tls_cert_domain }}/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+
+    # Proxy to backend API
+    location / {
+        proxy_pass http://localhost:{{ item.port }};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection keep-alive;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        client_max_body_size 100M;
+    }
+
+    # Logging
+    access_log /var/log/nginx/{{ item.name }}.dhanman.com.access.log;
+    error_log /var/log/nginx/{{ item.name }}.dhanman.com.error.log;
+}

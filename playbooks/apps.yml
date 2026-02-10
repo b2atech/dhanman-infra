@@ -1,0 +1,7 @@
+---
+- name: Setup Dhanman applications and services
+  hosts: prod
+  become: yes
+  roles:
+    - env-templates
+    - systemd-services

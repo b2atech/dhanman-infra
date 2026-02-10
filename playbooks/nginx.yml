@@ -1,0 +1,6 @@
+---
+- name: Setup nginx reverse proxy for Dhanman
+  hosts: prod
+  become: yes
+  roles:
+    - nginx

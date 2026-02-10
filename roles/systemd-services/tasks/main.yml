@@ -1,0 +1,18 @@
+---
+- name: Create systemd service files for Dhanman services
+  ansible.builtin.template:
+    src: dhanman.service.j2
+    dest: "/etc/systemd/system/dhanman-{{ item.name }}.service"
+    owner: root
+    group: root
+    mode: '0644'
+  loop: "{{ dhanman_services }}"
+  notify: Reload systemd
+
+- name: Ensure systemd services are in desired state
+  ansible.builtin.systemd:
+    name: "dhanman-{{ item.name }}"
+    enabled: "{{ systemd_services_enable }}"
+    state: "{{ systemd_services_state }}"
+    daemon_reload: yes
+  loop: "{{ dhanman_services }}"

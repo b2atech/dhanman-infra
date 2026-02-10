@@ -1,0 +1,24 @@
+---
+- name: Add Microsoft package signing key
+  ansible.builtin.get_url:
+    url: https://packages.microsoft.com/keys/microsoft.asc
+    dest: /tmp/microsoft.asc
+    mode: '0644'
+
+- name: Import Microsoft GPG key
+  ansible.builtin.apt_key:
+    file: /tmp/microsoft.asc
+    state: present
+
+- name: Add Microsoft repository for Ubuntu 24.04
+  ansible.builtin.apt_repository:
+    repo: "deb [arch=amd64] https://packages.microsoft.com/ubuntu/24.04/prod noble main"
+    state: present
+    filename: microsoft-prod
+    update_cache: yes
+
+- name: Install ASP.NET Core Runtime 9.0
+  ansible.builtin.apt:
+    name: aspnetcore-runtime-9.0
+    state: present
+    update_cache: yes

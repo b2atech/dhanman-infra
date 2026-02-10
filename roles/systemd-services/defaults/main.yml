@@ -1,0 +1,8 @@
+---
+# Default values for systemd-services role
+systemd_services_enable: false
+systemd_services_state: stopped
+dhanman_binaries_path: /var/www/prod/dhanman-binaries
+prod_root: /var/www/prod
+deploy_user: deploy
+dhanman_services: []

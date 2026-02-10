@@ -1,0 +1,28 @@
+---
+- name: Copy docker compose files to production
+  hosts: prod
+  become: yes
+  tasks:
+    - name: Ensure docker target directory exists
+      ansible.builtin.file:
+        path: "{{ docker_target_dir }}"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_group }}"
+        mode: '0755'
+
+    - name: Copy docker-compose.infra.yml to target
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../docker/docker-compose.infra.yml"
+        dest: "{{ docker_target_dir }}/docker-compose.infra.yml"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_group }}"
+        mode: '0644'
+
+    - name: Copy docker-compose.loki.yml to target
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../docker/docker-compose.loki.yml"
+        dest: "{{ docker_target_dir }}/docker-compose.loki.yml"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_group }}"
+        mode: '0644'

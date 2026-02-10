@@ -1,0 +1,92 @@
+---
+# Dhanman Production Environment Variables
+
+# Deployment user
+deploy_user: deploy
+deploy_group: deploy
+
+# Production paths
+prod_root: /var/www/prod
+dhanman_root: /opt/dhanman
+dhanman_binaries_path: "{{ prod_root }}/dhanman-binaries"
+
+# Service definitions - all Dhanman API modules
+dhanman_services:
+  - name: common
+    port: 5200
+    dll: Dhanman.Common.Api.dll
+  - name: sales
+    port: 5201
+    dll: Dhanman.Sales.Api.dll
+  - name: purchase
+    port: 5202
+    dll: Dhanman.Purchase.Api.dll
+  - name: payroll
+    port: 5203
+    dll: Dhanman.Payroll.Api.dll
+  - name: inventory
+    port: 5204
+    dll: Dhanman.Inventory.Api.dll
+  - name: community
+    port: 5205
+    dll: Dhanman.MyHome.Api.dll
+  - name: document
+    port: 5206
+    dll: Dhanman.Document.Api.dll
+  - name: payment
+    port: 5207
+    dll: Dhanman.Payment.Api.dll
+
+# Infrastructure UI lists (non-websocket and websocket)
+infra_ui_no_ws:
+  - name: common-ui
+    domain: common.dhanman.com
+    path: /var/www/prod/dhanman-common-ui
+  - name: sales-ui
+    domain: sales.dhanman.com
+    path: /var/www/prod/dhanman-sales-ui
+  - name: purchase-ui
+    domain: purchase.dhanman.com
+    path: /var/www/prod/dhanman-purchase-ui
+  - name: payroll-ui
+    domain: payroll.dhanman.com
+    path: /var/www/prod/dhanman-payroll-ui
+  - name: inventory-ui
+    domain: inventory.dhanman.com
+    path: /var/www/prod/dhanman-inventory-ui
+  - name: document-ui
+    domain: document.dhanman.com
+    path: /var/www/prod/dhanman-document-ui
+  - name: payment-ui
+    domain: payment.dhanman.com
+    path: /var/www/prod/dhanman-payment-ui
+
+infra_ui_ws:
+  - name: community-ui
+    domain: community.dhanman.com
+    path: /var/www/prod/dhanman-community-ui
+
+# TLS certificate paths (to be configured)
+tls_cert_path: /etc/letsencrypt/live
+tls_cert_domain: dhanman.com
+
+# Systemd service control - DO NOT auto-start/enable by default
+systemd_services_enable: false
+systemd_services_state: stopped
+
+# Nginx control - DO NOT auto-start/enable by default
+nginx_enable: false
+nginx_state: stopped
+
+# Docker settings
+docker_target_dir: /opt/dhanman
+docker_auto_start: false
+
+# UFW allowed ports
+ufw_allowed_ports:
+  - 22    # SSH
+  - 80    # HTTP
+  - 443   # HTTPS
+
+# Enable UFW firewall
+ufw_enabled: true

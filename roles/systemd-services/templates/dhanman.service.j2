@@ -1,0 +1,19 @@
+[Unit]
+Description=Dhanman {{ item.name | title }} Service
+After=network.target
+
+[Service]
+Type=notify
+WorkingDirectory={{ dhanman_binaries_path }}/dhanman-{{ item.name }}
+ExecStart=/usr/bin/dotnet {{ dhanman_binaries_path }}/dhanman-{{ item.name }}/{{ item.dll }}
+Restart=always
+RestartSec=10
+KillSignal=SIGINT
+SyslogIdentifier=dhanman-{{ item.name }}
+User={{ deploy_user }}
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=DOTNET_PRINT_TELEMETRY_MESSAGE=false
+EnvironmentFile={{ prod_root }}/dhanman-{{ item.name }}/.env
+
+[Install]
+WantedBy=multi-user.target

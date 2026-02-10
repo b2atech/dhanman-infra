@@ -1,0 +1,60 @@
+---
+- name: Deploy nginx API configuration for Dhanman services
+  ansible.builtin.template:
+    src: api.conf.j2
+    dest: "/etc/nginx/sites-available/{{ item.name }}.dhanman.com.conf"
+    owner: root
+    group: root
+    mode: '0644'
+  loop: "{{ dhanman_services }}"
+  notify: Reload nginx
+
+- name: Deploy nginx configuration for UI services (no websocket)
+  ansible.builtin.template:
+    src: infra_no_ws.conf.j2
+    dest: "/etc/nginx/sites-available/{{ item.domain }}.conf"
+    owner: root
+    group: root
+    mode: '0644'
+  loop: "{{ infra_ui_no_ws }}"
+  notify: Reload nginx
+
+- name: Deploy nginx configuration for UI services (with websocket)
+  ansible.builtin.template:
+    src: infra_ws.conf.j2
+    dest: "/etc/nginx/sites-available/{{ item.domain }}.conf"
+    owner: root
+    group: root
+    mode: '0644'
+  loop: "{{ infra_ui_ws }}"
+  notify: Reload nginx
+
+- name: Enable API site configs
+  ansible.builtin.file:
+    src: "/etc/nginx/sites-available/{{ item.name }}.dhanman.com.conf"
+    dest: "/etc/nginx/sites-enabled/{{ item.name }}.dhanman.com.conf"
+    state: link
+  loop: "{{ dhanman_services }}"
+  notify: Reload nginx
+
+- name: Enable UI (no-ws) site configs
+  ansible.builtin.file:
+    src: "/etc/nginx/sites-available/{{ item.domain }}.conf"
+    dest: "/etc/nginx/sites-enabled/{{ item.domain }}.conf"
+    state: link
+  loop: "{{ infra_ui_no_ws }}"
+  notify: Reload nginx
+
+- name: Enable UI (ws) site configs
+  ansible.builtin.file:
+    src: "/etc/nginx/sites-available/{{ item.domain }}.conf"
+    dest: "/etc/nginx/sites-enabled/{{ item.domain }}.conf"
+    state: link
+  loop: "{{ infra_ui_ws }}"
+  notify: Reload nginx
+
+- name: Ensure nginx is in desired state
+  ansible.builtin.service:
+    name: nginx
+    enabled: "{{ nginx_enable }}"
+    state: "{{ nginx_state }}"

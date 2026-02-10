@@ -1,0 +1,19 @@
+---
+- name: Create environment file directories for each service
+  ansible.builtin.file:
+    path: "{{ prod_root }}/dhanman-{{ item.name }}"
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_group }}"
+    mode: '0755'
+  loop: "{{ dhanman_services }}"
+
+- name: Deploy environment file templates for each service
+  ansible.builtin.template:
+    src: "{{ item.name }}.env.j2"
+    dest: "{{ prod_root }}/dhanman-{{ item.name }}/.env"
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_group }}"
+    mode: '0600'
+  loop: "{{ dhanman_services }}"
+  when: item.name in ['common', 'community', 'inventory', 'payroll', 'purchase', 'sales', 'document', 'payment']

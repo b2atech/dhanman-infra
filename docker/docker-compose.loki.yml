@@ -1,0 +1,58 @@
+version: '3.8'
+
+# Loki Stack for Log Aggregation and Monitoring
+# Includes Loki, Promtail, and Grafana
+
+services:
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: loki
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./loki-config:/etc/loki
+      - loki-data:/loki
+    networks:
+      - loki-network
+
+  promtail:
+    image: grafana/promtail:2.9.0
+    container_name: promtail
+    restart: unless-stopped
+    volumes:
+      - ./promtail-config.yaml:/etc/promtail/config.yaml:ro
+      - /var/log:/var/log:ro
+      - /var/www/logs:/var/www/logs:ro
+    command: -config.file=/etc/promtail/config.yaml
+    networks:
+      - loki-network
+    depends_on:
+      - loki
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-CHANGE_ME}
+      - GF_INSTALL_PLUGINS=grafana-clock-panel
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - loki-network
+    depends_on:
+      - loki
+
+volumes:
+  loki-data:
+  grafana-data:
+
+networks:
+  loki-network:
+    driver: bridge
+    name: loki-network

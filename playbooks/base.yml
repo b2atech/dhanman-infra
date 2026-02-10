@@ -1,0 +1,8 @@
+---
+- name: Setup base infrastructure for Dhanman production
+  hosts: prod
+  become: yes
+  roles:
+    - common
+    - dotnet
+    - docker

@@ -1,0 +1,24 @@
+---
+- name: Install docker.io package
+  ansible.builtin.apt:
+    name: docker.io
+    state: present
+    update_cache: yes
+
+- name: Install docker-compose-plugin
+  ansible.builtin.apt:
+    name: docker-compose-plugin
+    state: present
+    update_cache: yes
+
+- name: Ensure docker service is in desired state
+  ansible.builtin.service:
+    name: docker
+    enabled: "{{ docker_auto_start }}"
+    state: "{{ 'started' if docker_auto_start else 'stopped' }}"
+
+- name: Add deploy user to docker group
+  ansible.builtin.user:
+    name: "{{ deploy_user }}"
+    groups: docker
+    append: yes

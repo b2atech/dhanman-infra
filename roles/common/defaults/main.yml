@@ -1,0 +1,11 @@
+---
+# Default values for common role
+nginx_enable: false
+nginx_state: stopped
+ufw_enabled: true
+ufw_allowed_ports:
+  - 22
+  - 80
+  - 443
+deploy_user: deploy
+deploy_group: deploy

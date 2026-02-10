@@ -1,0 +1,55 @@
+---
+- name: Install common system packages
+  ansible.builtin.apt:
+    name:
+      - curl
+      - wget
+      - git
+      - unzip
+      - htop
+      - apt-transport-https
+      - ca-certificates
+      - gnupg
+      - lsb-release
+    state: present
+    update_cache: yes
+
+- name: Install nginx
+  ansible.builtin.apt:
+    name: nginx
+    state: present
+    update_cache: yes
+
+- name: Configure UFW firewall rules
+  community.general.ufw:
+    rule: allow
+    port: "{{ item }}"
+  loop: "{{ ufw_allowed_ports }}"
+  when: ufw_enabled | bool
+
+- name: Enable UFW firewall
+  community.general.ufw:
+    state: enabled
+  when: ufw_enabled | bool
+
+- name: Ensure nginx is in desired state
+  ansible.builtin.service:
+    name: nginx
+    enabled: "{{ nginx_enable }}"
+    state: "{{ nginx_state }}"
+
+- name: Create /opt/dhanman directory
+  ansible.builtin.file:
+    path: /opt/dhanman
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_group }}"
+    mode: '0755'
+
+- name: Create /var/www/prod directory
+  ansible.builtin.file:
+    path: /var/www/prod
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_group }}"
+    mode: '0755'

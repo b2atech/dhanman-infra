@@ -1,0 +1,9 @@
+---
+# Default values for nginx role
+nginx_enable: false
+nginx_state: stopped
+tls_cert_path: /etc/letsencrypt/live
+tls_cert_domain: dhanman.com
+dhanman_services: []
+infra_ui_no_ws: []
+infra_ui_ws: []

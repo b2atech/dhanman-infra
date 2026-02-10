@@ -1,0 +1,4 @@
+---
+# Default values for docker role
+docker_auto_start: false
+deploy_user: deploy

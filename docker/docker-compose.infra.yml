@@ -1,0 +1,71 @@
+version: '3.8'
+
+# Dhanman Infrastructure Services - PostgreSQL, RabbitMQ, Redis, etc.
+# This compose file manages infrastructure services for Dhanman production
+
+services:
+  # PostgreSQL database (external - reference only)
+  # In production, PostgreSQL is hosted separately
+  # postgres:
+  #   image: postgres:15
+  #   container_name: dhanman-postgres
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_USER: ${POSTGRES_USER}
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  #     POSTGRES_DB: dhanman
+  #   volumes:
+  #     - postgres-data:/var/lib/postgresql/data
+  #   ports:
+  #     - "5432:5432"
+  #   networks:
+  #     - dhanman-network
+
+  # RabbitMQ message broker
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: dhanman-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-admin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-CHANGE_ME}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    ports:
+      - "5672:5672"    # AMQP port
+      - "15672:15672"  # Management UI
+    networks:
+      - dhanman-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis cache
+  redis:
+    image: redis:7-alpine
+    container_name: dhanman-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:-CHANGE_ME}
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - dhanman-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  # postgres-data:
+  rabbitmq-data:
+  redis-data:
+
+networks:
+  dhanman-network:
+    driver: bridge
+    name: dhanman-network
