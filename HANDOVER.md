@@ -3,7 +3,7 @@
 ## Servers
 | Host | IP | Role |
 |------|-----|------|
-| dm-prd-n | 57.129.74.139 | **Primary prod** — all services run here |
+| dm-prd-n | 57.129.74.139 | **Primary prod** — all services running here |
 | dm-prd | 51.79.156.217 | **Streaming replica** (read-only) + Jenkins |
 | dm-qa | 54.37.159.71 | QA environment |
 
@@ -13,25 +13,27 @@ GitHub: `https://github.com/b2atech/dhanman-infra` (branch: main)
 
 ---
 
-## dm-prd-n Status
+## dm-prd-n Status ✅ FULLY OPERATIONAL
 
 | Component | Status | Notes |
 |-----------|--------|-------|
 | Bootstrap (UFW/fail2ban/SSH) | ✅ Done | |
 | .NET 9 ASP.NET Core | ✅ Done | |
-| PostgreSQL 18.3 | ✅ Done | Port 5432, listen_addresses=*, WAL replication active |
-| Redis | ✅ Done | 127.0.0.1 only, AOF, dangerous cmds disabled |
+| PostgreSQL 18.3 | ✅ Done | 127.0.0.1:5432, WAL replication active |
+| Redis | ✅ Done | 127.0.0.1:6379, password=rdB@yce-Codd(x->y) |
 | Docker CE | ✅ Done | |
-| HashiCorp Vault | ✅ Installed | **NOT initialized yet — needs `vault operator init`** |
-| RabbitMQ | ✅ Done | Docker container, healthy |
-| MinIO | ✅ Done | Docker container, healthy |
-| Prometheus + Loki + Grafana + Promtail + Portainer + Uptime Kuma | ✅ Done | Docker stack |
+| HashiCorp Vault | ✅ Running + seeded | https://vault.dhanman.com, unsealed, all secrets loaded |
+| RabbitMQ | ✅ Done | Docker, vhost=prod, user=dhanman, pass=B@dhi$1234 |
+| MinIO | ✅ Done | Docker, old data migrated, user=dhanmanprodadmin |
+| Monitoring stack | ✅ Done | Prometheus, Loki, Grafana, Promtail, Portainer, Uptime Kuma |
 | node_exporter | ✅ Done | |
-| nginx | ✅ Done | Vhosts deployed, **SSL certs NOT yet issued** |
+| nginx | ✅ Done + SSL | All service domains have valid Let's Encrypt certs |
 | Backup scripts + cron | ✅ Done | pg_backup at 02:00, minio_backup at 02:30 |
-| PgBouncer | ✅ Done | Port 6432 |
-| Production databases | ✅ Migrated | All 8 DBs from dm-prd PG18 restored here |
-| DNS | ✅ Done | All domains point to 57.129.74.139 |
+| PgBouncer | ✅ Done (port 6432) | Not currently used by apps (direct 5432 for LISTEN/NOTIFY) |
+| Production databases | ✅ Running | All 8 DBs migrated from dm-prd |
+| All 9 .NET services | ✅ Running | Ports 5100–5108, health checks passing |
+| DNS | ✅ Done | All domains → 57.129.74.139 |
+| MinIO data | ✅ Migrated | 66MB including avatars, sp-company-logos, apartment buckets |
 
 ## dm-prd Status
 
@@ -41,114 +43,95 @@ GitHub: `https://github.com/b2atech/dhanman-infra` (branch: main)
 | Replication | ✅ Active | `pg_is_in_recovery() = t` verified |
 | Jenkins | ✅ Running | CI/CD still active here |
 
-### Replication details (dm-prd)
-- Primary: 57.129.74.139:5432, user: replicator
-- pg_basebackup run with `-R` flag (standby.signal + primary_conninfo written)
-- max_connections=200 set (must match primary)
-- UFW rule on dm-prd-n: `allow from 51.79.156.217 to any port 5432` (inserted at position 4)
+---
+
+## Vault Credentials (NEW SERVER)
+
+**Store in your password manager — do NOT commit actual values here**
+
+- Unseal Key: `<stored in password manager>`
+- Root Token: `<stored in password manager>`
+- AppRole RoleId: `09ae57e8-8625-34e4-19df-81193b50a513`
+- AppRole SecretId: `<generated — run: vault write -f auth/approle/role/dhanman-service/secret-id>`
+- Vault Address (internal): `http://127.0.0.1:8200`
+- Vault Address (external): `https://vault.dhanman.com`
+
+### Vault Secret Paths
+- `secret/shared/global` — Auth0, ICICI, MinIO, RabbitMQ, SMTP, API keys
+- `secret/shared/databases` — All DB connection strings (127.0.0.1:5432)
+- `secret/shared/ai` — OpenAI API key
+
+### After server reboot: unseal Vault
+```bash
+ssh ubuntu@57.129.74.139
+export VAULT_ADDR='http://127.0.0.1:8200'
+vault operator unseal 'wVjzW/SEffsH42zXh/UgIM5NZn93StO6s4bKJehBj3k='
+```
 
 ---
 
-## Pending Steps (in order)
+## Remaining TODO Items
 
-### 1. Initialize Vault on dm-prd-n (MANUAL — must be done once)
-```bash
-ssh ubuntu@57.129.74.139
-export VAULT_ADDR='http://127.0.0.1:8200'
-vault operator init          # save the 5 unseal keys + root token SECURELY
-vault operator unseal        # run 3 times with 3 different keys
-vault login <root_token>
-```
+### High Priority
 
-### 2. Issue SSL certificates via certbot (MANUAL — DNS already resolved)
-DNS is already pointing to 57.129.74.139. Run:
-```bash
-ssh ubuntu@57.129.74.139
-# Service domains:
-sudo certbot --nginx -d prod.common.dhanman.com -d prod.community.dhanman.com \
-  -d prod.inventory.dhanman.com -d prod.payroll.dhanman.com \
-  -d prod.purchase.dhanman.com -d prod.sales.dhanman.com \
-  -d payment.dhanman.com -d prod.document.dhanman.com -d prod.agent.dhanman.com
-# Infra domains:
-sudo certbot --nginx -d vault.dhanman.com -d grafana.dhanman.com \
-  -d rabbit.dhanman.com -d minio.dhanman.com -d portainer.dhanman.com -d status.dhanman.com
-```
+1. **Add missing DNS records** (user must do in DNS provider):
+   - `grafana.dhanman.com` → 57.129.74.139
+   - `rabbit.dhanman.com` → 57.129.74.139
+   - `portainer.dhanman.com` → 57.129.74.139
+   - `status.dhanman.com` → 57.129.74.139 (currently points to old server)
+   
+   Then issue SSL certs:
+   ```bash
+   ssh ubuntu@57.129.74.139
+   sudo certbot certonly --webroot -w /var/www/html \
+     -d grafana.dhanman.com -d rabbit.dhanman.com \
+     -d portainer.dhanman.com -d status.dhanman.com \
+     --email b2a.admn@gmail.com --agree-tos --no-eff-email
+   # Create symlinks for cert paths
+   sudo ln -s /etc/letsencrypt/live/grafana.dhanman.com /etc/letsencrypt/live/rabbit.dhanman.com
+   sudo ln -s /etc/letsencrypt/live/grafana.dhanman.com /etc/letsencrypt/live/portainer.dhanman.com
+   sudo ln -s /etc/letsencrypt/live/grafana.dhanman.com /etc/letsencrypt/live/status.dhanman.com
+   # Re-enable vhosts
+   sudo ln -s /etc/nginx/sites-available/infra-grafana.conf /etc/nginx/sites-enabled/
+   sudo ln -s /etc/nginx/sites-available/infra-rabbit.conf /etc/nginx/sites-enabled/
+   sudo ln -s /etc/nginx/sites-available/infra-portainer.conf /etc/nginx/sites-enabled/
+   sudo ln -s /etc/nginx/sites-available/infra-status.conf /etc/nginx/sites-enabled/
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
 
-### 3. Configure Vault secrets (after Vault init + unseal)
-After Vault is initialized and unsealed:
-```bash
-export VAULT_ADDR='http://127.0.0.1:8200'
-vault login <root_token>
+2. **Configure Grafana Loki + Prometheus data sources** (first login at grafana.dhanman.com once DNS is up)
 
-# Enable KV secrets engine
-vault secrets enable -path=secret kv-v2
+3. **Set up pg_hba.conf in Ansible** — the `57.129.74.139/32` rules were added manually. Add them to the postgresql role so they survive reprovisioning.
 
-# Enable AppRole auth
-vault auth enable approle
+4. **Configure PgBouncer userlist** (for future connection pooling):
+   ```bash
+   # Get SCRAM hash from PostgreSQL
+   sudo -u postgres psql -c "SELECT passwd FROM pg_shadow WHERE usename='dhanmanprod';" | grep SCRAM > /etc/pgbouncer/userlist.txt
+   sudo systemctl reload pgbouncer
+   ```
+   Then update Vault DB connections back to port 6432 (requires app changes for LISTEN/NOTIFY).
 
-# Write DB connection strings
-vault kv put secret/dhanman/common \
-  ConnectionStrings__DefaultConnection="Host=127.0.0.1;Port=6432;Database=prod-dhanman-common;Username=dhanmanprod;Password=<pw>"
-# Repeat for: community, inventory, payroll, purchase, sales, payment, agent
+5. **Update Jenkins** on dm-prd to deploy to dm-prd-n instead of dm-prd. Change the deployment target IP/path in Jenkins pipelines.
 
-# Write RabbitMQ + MinIO secrets
-vault kv put secret/dhanman/rabbitmq url="amqp://dhanman:<pw>@127.0.0.1:5672/dhanman"
-vault kv put secret/dhanman/minio endpoint="http://127.0.0.1:9000" access_key="<key>" secret_key="<secret>"
+6. **Frontend deployment** — the frontend (1.3GB) was not copied. It may be served from old server or needs redeployment via Jenkins.
 
-# Create policy
-vault policy write dhanman-policy - <<EOF
-path "secret/data/dhanman/*" { capabilities = ["read"] }
-EOF
-
-# Create AppRole
-vault write auth/approle/role/dhanman \
-  token_policies="dhanman-policy" \
-  token_ttl=1h \
-  token_max_ttl=4h
-
-# Get RoleID (put this in .env files as Vault__RoleId)
-vault read auth/approle/role/dhanman/role-id
-
-# Create SecretID (used once to bootstrap service .env)
-vault write -f auth/approle/role/dhanman/secret-id
-```
-
-### 4. Deploy .NET service binaries + start services
-```bash
-cd /tmp/dhanman-infra/ansible
-# Create systemd units + .env files (binaries not needed for this step)
-ansible-playbook -i inventories/prod playbooks/03-deploy-services.yml \
-  -e vault_role_id=<role_id_from_step_3>
-
-# Then copy each service binary via Jenkins or rsync:
-# rsync -avz --delete dist/dhanman-common/ ubuntu@57.129.74.139:/var/www/prod/dhanman-common/
-# sudo systemctl start dhanman-common-prod
-```
-
-### 5. Update secrets.yml with real values (or encrypt with ansible-vault)
-Replace CHANGE_ME values in:
-- `ansible/inventories/prod/group_vars/all/secrets.yml`
-- `ansible/inventories/qa/group_vars/all/secrets.yml`
-
-Then optionally encrypt: `ansible-vault encrypt ansible/inventories/prod/group_vars/all/secrets.yml`
-
-### 6. Security cleanup
-- Remove `host all all 0.0.0.0/0 scram-sha-256` from dm-prd pg_hba.conf (security risk)
+### Security Cleanup
+- Remove `CHANGE_ME` values in `ansible/inventories/prod/group_vars/all/secrets.yml` (or encrypt with ansible-vault)
+- Remove `host all all 0.0.0.0/0 scram-sha-256` from dm-prd pg_hba.conf (security risk on old server)
 - Revoke the GitHub PAT used in these sessions
-- Add UFW replication rule to Ansible security role (currently added manually on dm-prd-n)
+- The old Vault on dm-prd is still running — consider stopping it once you've confirmed new Vault is stable
 
 ---
 
 ## Key Technical Notes
 
-- **PG18 on Ubuntu 25.04**: pgdg plucky repo is gone. Solution: noble pgdg repo + `libicu74` manually installed. Already baked into the postgresql role.
-- **Vault/HashiCorp apt**: Uses `noble` repo codename (`vault_apt_codename: noble` in group_vars).
-- **Ansible**: Run from `cd /tmp/dhanman-infra/ansible` — cfg picks up roles_path from there.
-- **community.docker**: Version 4.5.1 pinned (5.x needs ansible-core 2.17+ which needs Python 3.10+).
-- **Secrets**: Never hardcoded. Pass via `-e` at runtime or store in ansible-vault encrypted secrets.yml.
-- **postgres password on dm-prd-n**: `pgB@yce-Codd(x->y)` (set manually, not in Ansible)
-- **replicator password**: `Repl@DhanMan2024` (set manually on dm-prd-n)
-- **PgBouncer**: Port 6432 — services should connect via PgBouncer, not directly to 5432.
+- **PG18 on Ubuntu 25.04**: pgdg plucky repo is gone. noble pgdg repo + `libicu74` workaround baked in.
+- **Vault after reboot**: must be manually unsealed — run `vault operator unseal <key>` on each restart.
+- **RabbitMQ vhost**: apps use vhost `prod` (no leading slash). Old config had `/prod` which was wrong.
+- **DB connections**: use `127.0.0.1:5432` directly (not PgBouncer port 6432) because apps use LISTEN/NOTIFY.
+- **nginx SSL**: service domains share one cert at `prod.common.dhanman.com` with symlinks for other domains.
+- **pg_hba.conf**: `57.129.74.139/32` entries for dhanmanprod added manually — needed because apps connect via external IP.
+- **MinIO endpoint**: `files.dhanman.com` → nginx → port 9000 (S3 API). Console at `minio.dhanman.com` → port 9001.
 
 ---
 
@@ -160,15 +143,6 @@ cd /tmp/dhanman-infra/ansible
 # Re-run any single role:
 ansible-playbook -i inventories/prod playbooks/02-install-infra.yml --tags <role>
 
-# Full site deploy:
-ansible-playbook -i inventories/prod playbooks/site.yml
-
-# Deploy service units + .env files:
-ansible-playbook -i inventories/prod playbooks/03-deploy-services.yml -e vault_role_id=<role_id>
-
 # Rolling restart single service:
 ansible-playbook -i inventories/prod playbooks/deploy-service.yml -e service_name=dhanman-common
-
-# Security hardening only:
-ansible-playbook -i inventories/prod playbooks/security-hardening.yml
 ```
