@@ -36,8 +36,3 @@
     name: "{{ item.name }}-{{ env }}"
     enabled: yes
   loop: "{{ services }}"
-
-handlers:
-  - name: reload systemd
-    systemd:
-      daemon_reload: yes

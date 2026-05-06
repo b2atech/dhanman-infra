@@ -18,7 +18,7 @@ postgresql_use_pgdg: true
 postgresql_pgdg_codename: noble
 postgresql_backup_dir: /opt/backups/postgres
 postgresql_backup_retention_days: 7
-postgresql_listen_addresses: "127.0.0.1"
+postgresql_listen_addresses: "*"
 
 redis_port: 6379
 redis_bind: "127.0.0.1"
