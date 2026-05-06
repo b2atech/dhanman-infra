@@ -1,0 +1,26 @@
+#!/bin/bash
+# PostgreSQL backup — managed by Ansible
+# Credentials read from ~/.pgpass — never hardcoded here
+set -euo pipefail
+
+PGHOST="127.0.0.1"
+PGPORT="{{ postgresql_port }}"
+PGUSER="dhanmanbackup"
+BACKUP_DATE=$(date +"%F")
+TIMESTAMP=$(date +"%F_%H-%M")
+BACKUP_DIR="{{ postgresql_backup_dir }}/{{ env }}/${BACKUP_DATE}"
+RETENTION_DAYS="{{ postgresql_backup_retention_days }}"
+
+mkdir -p "${BACKUP_DIR}"
+echo "[$(date)] Starting PostgreSQL backup — {{ env }}"
+
+{% for svc in services %}
+DB="{{ env }}-dhanman-{{ svc.name | replace('dhanman-', '') }}"
+echo "[$(date)] Backing up ${DB}"
+pg_dump -h "${PGHOST}" -U "${PGUSER}" -p "${PGPORT}" \
+  -F c -b -d "${DB}" \
+  -f "${BACKUP_DIR}/${DB}-${TIMESTAMP}.backup"
+{% endfor %}
+
+find "{{ postgresql_backup_dir }}/{{ env }}/" -type d -mtime "+${RETENTION_DAYS}" -exec rm -rf {} + 2>/dev/null || true
+echo "[$(date)] Backup complete — ${BACKUP_DIR}"
