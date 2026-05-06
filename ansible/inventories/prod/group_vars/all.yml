@@ -7,10 +7,15 @@ service_group: www-data
 vault_address: https://vault.dhanman.com
 vault_port: 8200
 vault_storage_path: /opt/vault/data
+# HashiCorp apt doesn't support plucky yet — use noble (binary-compatible)
+vault_apt_codename: noble
 
 postgresql_version: "18"
 postgresql_cluster: main
 postgresql_port: 5432
+postgresql_use_pgdg: true
+# plucky-pgdg is gone from pgdg; noble-pgdg works with libicu74 installed manually
+postgresql_pgdg_codename: noble
 postgresql_backup_dir: /opt/backups/postgres
 postgresql_backup_retention_days: 7
 postgresql_listen_addresses: "127.0.0.1"

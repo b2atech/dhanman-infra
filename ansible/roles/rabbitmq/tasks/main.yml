@@ -20,9 +20,3 @@
     state: present
   register: rabbitmq_compose_result
 
-handlers:
-  - name: restart rabbitmq
-    community.docker.docker_compose_v2:
-      project_src: "{{ rabbitmq_data_dir }}"
-      state: present
-      recreate: always

@@ -1,0 +1,6 @@
+---
+- name: restart minio
+  community.docker.docker_compose_v2:
+    project_src: "{{ minio_data_dir }}"
+    state: present
+    recreate: always

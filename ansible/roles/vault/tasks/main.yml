@@ -1,13 +1,13 @@
 ---
-- name: Add HashiCorp GPG key
-  get_url:
-    url: https://apt.releases.hashicorp.com/gpg
-    dest: /usr/share/keyrings/hashicorp-archive-keyring.gpg
-    mode: "0644"
+- name: Download and dearmor HashiCorp GPG key
+  shell: |
+    curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+  args:
+    creates: /usr/share/keyrings/hashicorp-archive-keyring.gpg
 
 - name: Add HashiCorp apt repository
   apt_repository:
-    repo: "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
+    repo: "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com {{ vault_apt_codename | default(ansible_distribution_release) }} main"
     state: present
     filename: hashicorp
 
@@ -47,9 +47,3 @@
     name: vault
     enabled: yes
     state: started
-
-handlers:
-  - name: restart vault
-    systemd:
-      name: vault
-      state: restarted

@@ -11,6 +11,8 @@ vault_storage_path: /opt/vault/data
 postgresql_version: "18"
 postgresql_cluster: main
 postgresql_port: 5432
+postgresql_use_pgdg: true
+postgresql_pgdg_codename: noble
 postgresql_listen_addresses: "127.0.0.1"
 
 # Replication settings — this host is a streaming replica of dm-prd-n

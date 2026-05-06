@@ -7,10 +7,13 @@ service_group: www-data
 vault_address: https://vault.qa.dhanman.com
 vault_port: 8200
 vault_storage_path: /opt/vault/data
+vault_apt_codename: noble
 
 postgresql_version: "18"
 postgresql_cluster: main
 postgresql_port: 5432
+postgresql_use_pgdg: true
+postgresql_pgdg_codename: noble
 postgresql_backup_dir: /opt/backups/postgres
 postgresql_backup_retention_days: 3
 postgresql_listen_addresses: "127.0.0.1"

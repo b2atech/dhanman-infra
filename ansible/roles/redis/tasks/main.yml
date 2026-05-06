@@ -58,8 +58,3 @@
     enabled: yes
     state: started
 
-handlers:
-  - name: restart redis
-    systemd:
-      name: redis-server
-      state: restarted

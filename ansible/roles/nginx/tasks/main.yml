@@ -66,8 +66,3 @@
     enabled: yes
     state: started
 
-handlers:
-  - name: reload nginx
-    systemd:
-      name: nginx
-      state: reloaded
