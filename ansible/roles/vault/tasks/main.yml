@@ -36,7 +36,7 @@
 - name: Deploy Vault config
   template:
     src: vault.hcl.j2
-    dest: /etc/vault.hcl
+    dest: /etc/vault.d/vault.hcl
     owner: vault
     group: vault
     mode: "0640"

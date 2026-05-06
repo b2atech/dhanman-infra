@@ -52,6 +52,14 @@
       rename-command KEYS     ""
   notify: restart redis
 
+- name: Set Redis password
+  lineinfile:
+    path: /etc/redis/redis.conf
+    regexp: "^requirepass"
+    line: "requirepass {{ redis_password }}"
+  when: redis_password is defined and redis_password != ''
+  notify: restart redis
+
 - name: Enable and start Redis
   systemd:
     name: redis-server

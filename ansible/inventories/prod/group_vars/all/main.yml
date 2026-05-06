@@ -100,12 +100,14 @@ postgres_exporter_port: 9187
 infra_vhosts:
   - subdomain: vault
     port: "{{ vault_port }}"
-  - subdomain: grafana
+  - subdomain: logs          # Grafana
     port: 3000
-  - subdomain: rabbit
+  - subdomain: rabbitmq      # RabbitMQ management UI
     port: 15672
-  - subdomain: minio
+  - subdomain: minio         # MinIO console
     port: 9001
+  - subdomain: files         # MinIO S3 API
+    port: 9000
   - subdomain: portainer
     port: 9443
   - subdomain: status

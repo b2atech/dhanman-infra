@@ -12,5 +12,9 @@ host    all             all               ::1/128               scram-sha-256
 # Replication — allow only from fallback server IP
 host    replication     replicator        51.79.156.217/32      scram-sha-256
 
+# App connections via external IP (server connecting to itself via DNS)
+host    all             dhanmanprod       57.129.74.139/32      scram-sha-256
+host    all             postgres_exporter 57.129.74.139/32      scram-sha-256
+
 # Deny everything else
 host    all             all               0.0.0.0/0             reject
