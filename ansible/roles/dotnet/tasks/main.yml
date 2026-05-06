@@ -1,0 +1,18 @@
+---
+- name: Download Microsoft package repository config
+  get_url:
+    url: https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb
+    dest: /tmp/packages-microsoft-prod.deb
+
+- name: Install Microsoft repository package
+  apt:
+    deb: /tmp/packages-microsoft-prod.deb
+
+- name: Update apt cache after adding Microsoft repo
+  apt:
+    update_cache: yes
+
+- name: Install ASP.NET Core Runtime 9.0
+  apt:
+    name: aspnetcore-runtime-9.0
+    state: present

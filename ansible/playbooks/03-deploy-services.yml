@@ -1,0 +1,10 @@
+---
+# Deploy DhanMan .NET service units + .env files
+# Binaries must already be on the server (deployed by Jenkins)
+# Usage: ansible-playbook -i inventories/prod playbooks/03-deploy-services.yml
+
+- name: Deploy DhanMan services
+  hosts: all
+  become: true
+  roles:
+    - dhanman_service

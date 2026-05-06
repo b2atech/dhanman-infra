@@ -1,0 +1,105 @@
+---
+env: qa
+services_base_dir: /var/www/qa
+service_user: www-data
+service_group: www-data
+
+vault_address: https://vault.qa.dhanman.com
+vault_port: 8200
+vault_storage_path: /opt/vault/data
+
+postgresql_version: "18"
+postgresql_cluster: main
+postgresql_port: 5432
+postgresql_backup_dir: /opt/backups/postgres
+postgresql_backup_retention_days: 3
+postgresql_listen_addresses: "127.0.0.1"
+
+redis_port: 6379
+redis_bind: "127.0.0.1"
+
+services:
+  - name: dhanman-common
+    dll: Dhanman.Common.Api.dll
+    port: 5200
+    domain: qa.common.dhanman.com
+
+  - name: dhanman-community
+    dll: Dhanman.MyHome.Api.dll
+    port: 5205
+    domain: qa.community.dhanman.com
+
+  - name: dhanman-inventory
+    dll: Dhanman.Inventory.Api.dll
+    port: 5204
+    domain: qa.inventory.dhanman.com
+
+  - name: dhanman-payroll
+    dll: Dhanman.Payroll.Api.dll
+    port: 5203
+    domain: qa.payroll.dhanman.com
+
+  - name: dhanman-purchase
+    dll: Dhanman.Purchase.Api.dll
+    port: 5202
+    domain: qa.purchase.dhanman.com
+
+  - name: dhanman-sales
+    dll: Dhanman.Sales.Api.dll
+    port: 5201
+    domain: qa.sales.dhanman.com
+
+  - name: dhanman-payment
+    dll: Dhanman.Payment.Api.dll
+    port: 5206
+    domain: qa.payment.dhanman.com
+
+  - name: dhanman-document
+    dll: Dhanman.Document.dll
+    port: 5207
+    domain: qa.document.dhanman.com
+
+  - name: dhanman-agent
+    dll: Dhanman.Agent.API.dll
+    port: 5208
+    domain: qa.agent.dhanman.com
+
+ufw_allowed_ports:
+  - { port: "22",  proto: tcp, comment: "SSH" }
+  - { port: "80",  proto: tcp, comment: "HTTP" }
+  - { port: "443", proto: tcp, comment: "HTTPS" }
+
+domain: dhanman.com
+
+rabbitmq_data_dir: /opt/rabbitmq
+rabbitmq_user: dhanman
+rabbitmq_vhost: /dhanman
+rabbitmq_port: 5672
+rabbitmq_mgmt_port: 15672
+
+minio_data_dir: /opt/minio
+minio_storage_dir: /opt/minio/data
+minio_port: 9000
+minio_console_port: 9001
+minio_backup_dir: /opt/backups/minio
+minio_backup_retention_days: 3
+
+monitoring_dir: /opt/monitoring
+grafana_port: 3000
+grafana_admin_user: admin
+loki_port: 3100
+prometheus_port: 9090
+node_exporter_port: 9100
+postgres_exporter_port: 9187
+
+infra_vhosts:
+  - subdomain: vault-qa
+    port: "{{ vault_port }}"
+  - subdomain: grafana-qa
+    port: 3000
+  - subdomain: rabbit-qa
+    port: 15672
+  - subdomain: minio-qa
+    port: 9001
+  - subdomain: status-qa
+    port: 3001

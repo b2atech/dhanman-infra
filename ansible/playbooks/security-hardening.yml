@@ -1,0 +1,10 @@
+---
+# Re-run security hardening independently (e.g. after a config drift audit)
+# Safe to run at any time — idempotent
+# Usage: ansible-playbook -i inventories/prod playbooks/security-hardening.yml
+
+- name: Security hardening
+  hosts: all
+  become: true
+  roles:
+    - security

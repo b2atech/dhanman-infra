@@ -1,0 +1,7 @@
+---
+# Full site provisioning — runs all playbooks in order
+# Usage: ansible-playbook -i inventories/prod playbooks/site.yml
+
+- import_playbook: 01-bootstrap.yml
+- import_playbook: 02-install-infra.yml
+- import_playbook: 03-deploy-services.yml

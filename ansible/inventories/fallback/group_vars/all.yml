@@ -1,0 +1,49 @@
+---
+env: fallback
+services_base_dir: /var/www/prod
+service_user: www-data
+service_group: www-data
+
+vault_address: https://vault.dhanman.com
+vault_port: 8200
+vault_storage_path: /opt/vault/data
+
+postgresql_version: "18"
+postgresql_cluster: main
+postgresql_port: 5432
+postgresql_listen_addresses: "127.0.0.1"
+
+# Replication settings — this host is a streaming replica of dm-prd-n
+postgresql_replication_mode: replica
+postgresql_primary_host: 57.129.74.139
+postgresql_primary_port: 5432
+postgresql_replication_user: replicator
+
+redis_port: 6379
+redis_bind: "127.0.0.1"
+
+ufw_allowed_ports:
+  - { port: "22",  proto: tcp, comment: "SSH" }
+  - { port: "80",  proto: tcp, comment: "HTTP" }
+  - { port: "443", proto: tcp, comment: "HTTPS" }
+
+postgresql_backup_dir: /opt/backups/postgres
+postgresql_backup_retention_days: 7
+
+domain: dhanman.com
+
+# Jenkins runs on this server (16GB RAM — suitable as CI host)
+jenkins_port: 9081
+jenkins_domain: jenkins.dhanman.com
+
+monitoring_dir: /opt/monitoring
+grafana_port: 3000
+grafana_admin_user: admin
+node_exporter_port: 9100
+
+minio_data_dir: /opt/minio
+minio_storage_dir: /opt/minio/data
+minio_port: 9000
+minio_console_port: 9001
+minio_backup_dir: /opt/backups/minio
+minio_backup_retention_days: 7

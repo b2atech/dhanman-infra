@@ -1,0 +1,24 @@
+# Ansible
+*.retry
+ansible/inventories/*/group_vars/vault.yml
+ansible/inventories/*/group_vars/secrets.yml
+.vault_pass
+
+# Secrets — never commit these
+*.env
+*.pem
+*.key
+*.pfx
+*.p12
+.pgpass
+vault-token
+*_token.txt
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+__pycache__/
+*.pyc

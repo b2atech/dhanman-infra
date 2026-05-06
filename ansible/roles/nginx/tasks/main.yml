@@ -1,0 +1,73 @@
+---
+- name: Install nginx and certbot
+  apt:
+    name:
+      - nginx
+      - certbot
+      - python3-certbot-nginx
+    state: present
+    update_cache: yes
+
+- name: Deploy hardened nginx.conf
+  template:
+    src: nginx.conf.j2
+    dest: /etc/nginx/nginx.conf
+    owner: root
+    group: root
+    mode: "0644"
+    validate: "/usr/sbin/nginx -t -c %s"
+  notify: reload nginx
+
+- name: Remove default nginx site
+  file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: reload nginx
+
+- name: Deploy service vhost configs
+  template:
+    src: service-vhost.conf.j2
+    dest: "/etc/nginx/sites-available/{{ item.name }}.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ services }}"
+  notify: reload nginx
+
+- name: Enable service vhosts
+  file:
+    src: "/etc/nginx/sites-available/{{ item.name }}.conf"
+    dest: "/etc/nginx/sites-enabled/{{ item.name }}.conf"
+    state: link
+  loop: "{{ services }}"
+  notify: reload nginx
+
+- name: Deploy infra vhost configs
+  template:
+    src: infra-vhost.conf.j2
+    dest: "/etc/nginx/sites-available/infra-{{ item.subdomain }}.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ infra_vhosts | default([]) }}"
+  notify: reload nginx
+
+- name: Enable infra vhosts
+  file:
+    src: "/etc/nginx/sites-available/infra-{{ item.subdomain }}.conf"
+    dest: "/etc/nginx/sites-enabled/infra-{{ item.subdomain }}.conf"
+    state: link
+  loop: "{{ infra_vhosts | default([]) }}"
+  notify: reload nginx
+
+- name: Enable and start nginx
+  systemd:
+    name: nginx
+    enabled: yes
+    state: started
+
+handlers:
+  - name: reload nginx
+    systemd:
+      name: nginx
+      state: reloaded

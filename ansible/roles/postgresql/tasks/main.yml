@@ -1,0 +1,131 @@
+---
+- name: Add PostgreSQL GPG key
+  get_url:
+    url: https://www.postgresql.org/media/keys/ACCC4CF8.asc
+    dest: /usr/share/keyrings/postgresql.asc
+    mode: "0644"
+
+- name: Add PostgreSQL apt repository
+  apt_repository:
+    repo: "deb [signed-by=/usr/share/keyrings/postgresql.asc] https://apt.postgresql.org/pub/repos/apt {{ ansible_distribution_release }}-pgdg main"
+    state: present
+    filename: pgdg
+
+- name: Install PostgreSQL 18
+  apt:
+    name:
+      - postgresql-18
+      - postgresql-client-18
+      - postgresql-18-pgvector
+      - postgresql-18-cron
+      - pgbouncer
+    state: present
+    update_cache: yes
+
+- name: Configure listen_addresses
+  lineinfile:
+    path: "/etc/postgresql/18/main/postgresql.conf"
+    regexp: "^#?listen_addresses"
+    line: "listen_addresses = '{{ postgresql_listen_addresses }}'"
+  notify: restart postgresql
+
+- name: Configure shared_buffers
+  lineinfile:
+    path: "/etc/postgresql/18/main/postgresql.conf"
+    regexp: "^#?shared_buffers"
+    line: "shared_buffers = {{ (ansible_memtotal_mb * 0.25) | int }}MB"
+  notify: restart postgresql
+
+- name: Configure max_connections
+  lineinfile:
+    path: "/etc/postgresql/18/main/postgresql.conf"
+    regexp: "^#?max_connections"
+    line: "max_connections = 200"
+  notify: restart postgresql
+
+- name: Configure WAL level for replication
+  lineinfile:
+    path: "/etc/postgresql/18/main/postgresql.conf"
+    regexp: "^#?wal_level"
+    line: "wal_level = replica"
+  notify: restart postgresql
+
+- name: Configure max_wal_senders
+  lineinfile:
+    path: "/etc/postgresql/18/main/postgresql.conf"
+    regexp: "^#?max_wal_senders"
+    line: "max_wal_senders = 3"
+  notify: restart postgresql
+
+- name: Configure wal_keep_size
+  lineinfile:
+    path: "/etc/postgresql/18/main/postgresql.conf"
+    regexp: "^#?wal_keep_size"
+    line: "wal_keep_size = 1GB"
+  notify: restart postgresql
+
+- name: Deploy pg_hba.conf
+  template:
+    src: pg_hba.conf.j2
+    dest: /etc/postgresql/18/main/pg_hba.conf
+    owner: postgres
+    group: postgres
+    mode: "0640"
+  notify: restart postgresql
+
+- name: Deploy PgBouncer config
+  template:
+    src: pgbouncer.ini.j2
+    dest: /etc/pgbouncer/pgbouncer.ini
+    owner: postgres
+    group: postgres
+    mode: "0640"
+  notify: restart pgbouncer
+
+- name: Create backup directory
+  file:
+    path: "{{ postgresql_backup_dir }}"
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: "0750"
+
+- name: Deploy backup script
+  template:
+    src: pg_backup.sh.j2
+    dest: /opt/scripts/pg_backup.sh
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Schedule PostgreSQL backup cron
+  cron:
+    name: postgresql_daily_backup
+    user: postgres
+    minute: "0"
+    hour: "2"
+    job: "/opt/scripts/pg_backup.sh >> /var/log/pg_backup.log 2>&1"
+    state: present
+
+- name: Enable and start PostgreSQL
+  systemd:
+    name: postgresql
+    enabled: yes
+    state: started
+
+- name: Enable and start PgBouncer
+  systemd:
+    name: pgbouncer
+    enabled: yes
+    state: started
+
+handlers:
+  - name: restart postgresql
+    systemd:
+      name: postgresql
+      state: restarted
+
+  - name: restart pgbouncer
+    systemd:
+      name: pgbouncer
+      state: restarted

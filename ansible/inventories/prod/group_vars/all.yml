@@ -1,0 +1,107 @@
+---
+env: prod
+services_base_dir: /var/www/prod
+service_user: www-data
+service_group: www-data
+
+vault_address: https://vault.dhanman.com
+vault_port: 8200
+vault_storage_path: /opt/vault/data
+
+postgresql_version: "18"
+postgresql_cluster: main
+postgresql_port: 5432
+postgresql_backup_dir: /opt/backups/postgres
+postgresql_backup_retention_days: 7
+postgresql_listen_addresses: "127.0.0.1"
+
+redis_port: 6379
+redis_bind: "127.0.0.1"
+
+services:
+  - name: dhanman-common
+    dll: Dhanman.Common.Api.dll
+    port: 5100
+    domain: prod.common.dhanman.com
+
+  - name: dhanman-community
+    dll: Dhanman.Community.Api.dll
+    port: 5101
+    domain: prod.community.dhanman.com
+
+  - name: dhanman-inventory
+    dll: Dhanman.Inventory.Api.dll
+    port: 5102
+    domain: prod.inventory.dhanman.com
+
+  - name: dhanman-payroll
+    dll: Dhanman.Payroll.Api.dll
+    port: 5103
+    domain: prod.payroll.dhanman.com
+
+  - name: dhanman-purchase
+    dll: Dhanman.Purchase.Api.dll
+    port: 5104
+    domain: prod.purchase.dhanman.com
+
+  - name: dhanman-sales
+    dll: Dhanman.Sales.Api.dll
+    port: 5105
+    domain: prod.sales.dhanman.com
+
+  - name: dhanman-payment
+    dll: Dhanman.Payment.Api.dll
+    port: 5106
+    domain: payment.dhanman.com
+
+  - name: dhanman-document
+    dll: Dhanman.Document.dll
+    port: 5107
+    domain: prod.document.dhanman.com
+
+  - name: dhanman-agent
+    dll: Dhanman.Agent.API.dll
+    port: 5108
+    domain: prod.agent.dhanman.com
+
+ufw_allowed_ports:
+  - { port: "22",  proto: tcp, comment: "SSH" }
+  - { port: "80",  proto: tcp, comment: "HTTP" }
+  - { port: "443", proto: tcp, comment: "HTTPS" }
+
+domain: dhanman.com
+
+rabbitmq_data_dir: /opt/rabbitmq
+rabbitmq_user: dhanman
+rabbitmq_vhost: /dhanman
+rabbitmq_port: 5672
+rabbitmq_mgmt_port: 15672
+
+minio_data_dir: /opt/minio
+minio_storage_dir: /opt/minio/data
+minio_port: 9000
+minio_console_port: 9001
+minio_backup_dir: /opt/backups/minio
+minio_backup_retention_days: 7
+
+monitoring_dir: /opt/monitoring
+grafana_port: 3000
+grafana_admin_user: admin
+loki_port: 3100
+prometheus_port: 9090
+node_exporter_port: 9100
+postgres_exporter_port: 9187
+
+infra_vhosts:
+  - subdomain: vault
+    port: "{{ vault_port }}"
+  - subdomain: grafana
+    port: 3000
+  - subdomain: rabbit
+    port: 15672
+  - subdomain: minio
+    port: 9001
+  - subdomain: portainer
+    port: 9443
+  - subdomain: status
+    port: 3001

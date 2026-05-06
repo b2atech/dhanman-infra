@@ -1,0 +1,11 @@
+---
+# Bootstrap: common baseline, security hardening
+# Run once on a fresh server before everything else
+# Usage: ansible-playbook -i inventories/prod playbooks/01-bootstrap.yml
+
+- name: Bootstrap server
+  hosts: all
+  become: true
+  roles:
+    - common
+    - security

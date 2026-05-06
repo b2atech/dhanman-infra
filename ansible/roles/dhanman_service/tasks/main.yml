@@ -1,0 +1,43 @@
+---
+- name: Create service directories
+  file:
+    path: "{{ services_base_dir }}/{{ item.name }}"
+    state: directory
+    owner: "{{ service_user }}"
+    group: "{{ service_group }}"
+    mode: "0750"
+  loop: "{{ services }}"
+
+- name: Deploy systemd service units
+  template:
+    src: service.unit.j2
+    dest: "/etc/systemd/system/{{ item.name }}-{{ env }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ services }}"
+  notify: reload systemd
+
+- name: Deploy environment files
+  template:
+    src: env.j2
+    dest: "{{ services_base_dir }}/{{ item.name }}/.env"
+    owner: "{{ service_user }}"
+    group: "{{ service_group }}"
+    mode: "0640"
+  loop: "{{ services }}"
+
+- name: Reload systemd daemon
+  systemd:
+    daemon_reload: yes
+
+- name: Enable services (do not start — binaries not deployed yet)
+  systemd:
+    name: "{{ item.name }}-{{ env }}"
+    enabled: yes
+  loop: "{{ services }}"
+
+handlers:
+  - name: reload systemd
+    systemd:
+      daemon_reload: yes

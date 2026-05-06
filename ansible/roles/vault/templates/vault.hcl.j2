@@ -1,0 +1,12 @@
+storage "file" {
+  path = "{{ vault_storage_path }}"
+}
+
+# Listener on localhost only — nginx handles external TLS
+listener "tcp" {
+  address     = "127.0.0.1:{{ vault_port }}"
+  tls_disable = 1
+}
+
+ui            = true
+disable_mlock = true

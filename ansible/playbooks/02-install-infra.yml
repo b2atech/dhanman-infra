@@ -1,0 +1,19 @@
+---
+# Install all infrastructure components
+# Requires bootstrap (01) to have run first
+# Usage: ansible-playbook -i inventories/prod playbooks/02-install-infra.yml
+
+- name: Install infrastructure
+  hosts: all
+  become: true
+  roles:
+    - dotnet
+    - docker
+    - postgresql
+    - redis
+    - vault
+    - rabbitmq
+    - minio
+    - monitoring
+    - nginx
+    - backup

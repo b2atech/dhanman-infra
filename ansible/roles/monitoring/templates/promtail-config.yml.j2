@@ -1,0 +1,39 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: systemd-journal
+    journal:
+      max_age: 12h
+      labels:
+        job: systemd-journal
+        host: "{{ inventory_hostname }}"
+        env: "{{ env }}"
+    relabel_configs:
+      - source_labels: [__journal__systemd_unit]
+        target_label: unit
+
+  - job_name: dhanman-services
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: dhanman
+          env: "{{ env }}"
+          __path__: /var/log/dhanman/*.log
+
+  - job_name: nginx
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: nginx
+          env: "{{ env }}"
+          __path__: /var/log/nginx/*.log
