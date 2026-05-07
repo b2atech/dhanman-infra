@@ -11,6 +11,14 @@
     - "{{ minio_backup_dir }}"
     - /opt/scripts
 
+- name: Create node_exporter textfile directory for backup metrics
+  file:
+    path: /var/lib/prometheus/node-exporter
+    state: directory
+    owner: prometheus
+    group: prometheus
+    mode: "0755"
+
 - name: Deploy PostgreSQL backup script
   template:
     src: pg_backup.sh.j2

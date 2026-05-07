@@ -1,0 +1,119 @@
+pg_stat_statements:
+  query: |
+    SELECT
+      pg_get_userbyid(userid) AS user,
+      pg_database.datname AS datname,
+      queryid,
+      calls,
+      total_exec_time AS total_time_ms,
+      mean_exec_time AS mean_time_ms,
+      max_exec_time AS max_time_ms,
+      stddev_exec_time AS stddev_time_ms,
+      rows,
+      shared_blks_hit,
+      shared_blks_read,
+      shared_blks_written,
+      local_blks_hit,
+      local_blks_read,
+      local_blks_written,
+      temp_blks_read,
+      temp_blks_written,
+      (shared_blk_read_time + local_blk_read_time + temp_blk_read_time) AS blk_read_time_ms,
+      (shared_blk_write_time + local_blk_write_time + temp_blk_write_time) AS blk_write_time_ms,
+      wal_records,
+      wal_bytes
+    FROM pg_stat_statements
+    JOIN pg_database ON pg_database.oid = pg_stat_statements.dbid
+    WHERE calls > 0
+    ORDER BY total_exec_time DESC
+    LIMIT 100
+  metrics:
+    - user:
+        usage: LABEL
+        description: User who ran the query
+    - datname:
+        usage: LABEL
+        description: Database name
+    - queryid:
+        usage: LABEL
+        description: Query ID hash
+    - calls:
+        usage: COUNTER
+        description: Number of times executed
+    - total_time_ms:
+        usage: COUNTER
+        description: Total time spent in ms
+    - mean_time_ms:
+        usage: GAUGE
+        description: Mean time in ms
+    - max_time_ms:
+        usage: GAUGE
+        description: Max time in ms
+    - stddev_time_ms:
+        usage: GAUGE
+        description: Stddev of time in ms
+    - rows:
+        usage: COUNTER
+        description: Total rows returned
+    - shared_blks_hit:
+        usage: COUNTER
+        description: Shared block cache hits
+    - shared_blks_read:
+        usage: COUNTER
+        description: Shared blocks read from disk
+    - shared_blks_written:
+        usage: COUNTER
+        description: Shared blocks written
+    - local_blks_hit:
+        usage: COUNTER
+        description: Local block cache hits
+    - local_blks_read:
+        usage: COUNTER
+        description: Local blocks read
+    - local_blks_written:
+        usage: COUNTER
+        description: Local blocks written
+    - temp_blks_read:
+        usage: COUNTER
+        description: Temp blocks read
+    - temp_blks_written:
+        usage: COUNTER
+        description: Temp blocks written
+    - blk_read_time_ms:
+        usage: COUNTER
+        description: Time spent reading blocks (all types) in ms
+    - blk_write_time_ms:
+        usage: COUNTER
+        description: Time spent writing blocks (all types) in ms
+    - wal_records:
+        usage: COUNTER
+        description: WAL records generated
+    - wal_bytes:
+        usage: COUNTER
+        description: WAL bytes generated
+
+pg_stat_checkpointer:
+  query: |
+    SELECT
+      num_timed AS checkpoints_timed,
+      num_requested AS checkpoints_req,
+      write_time AS checkpoint_write_time,
+      sync_time AS checkpoint_sync_time,
+      buffers_written AS buffers_checkpoint
+    FROM pg_stat_checkpointer
+  metrics:
+    - checkpoints_timed:
+        usage: COUNTER
+        description: Scheduled checkpoints performed
+    - checkpoints_req:
+        usage: COUNTER
+        description: Requested checkpoints performed
+    - checkpoint_write_time:
+        usage: COUNTER
+        description: Time spent writing checkpoint files (ms)
+    - checkpoint_sync_time:
+        usage: COUNTER
+        description: Time spent syncing checkpoint files (ms)
+    - buffers_checkpoint:
+        usage: COUNTER
+        description: Buffers written during checkpoints

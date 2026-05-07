@@ -12,8 +12,8 @@ server {
     http2 on;
     server_name {{ item.domain }};
 
-    ssl_certificate     /etc/letsencrypt/live/{{ item.domain }}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/{{ item.domain }}/privkey.pem;
+    ssl_certificate     /etc/letsencrypt/live/{{ services_ssl_cert_domain | default(item.domain) }}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/{{ services_ssl_cert_domain | default(item.domain) }}/privkey.pem;
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 

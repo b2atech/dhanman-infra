@@ -1,4 +1,12 @@
 ---
+- name: Create shared logs directory
+  file:
+    path: "{{ services_base_dir }}/logs"
+    state: directory
+    owner: "{{ service_user }}"
+    group: "{{ service_group }}"
+    mode: "0775"
+
 - name: Create service directories
   file:
     path: "{{ services_base_dir }}/{{ item.name }}"
@@ -6,6 +14,15 @@
     owner: "{{ service_user }}"
     group: "{{ service_group }}"
     mode: "0750"
+  loop: "{{ services }}"
+
+- name: Deploy Serilog file-sink config for each service
+  template:
+    src: appsettings.Production.json.j2
+    dest: "{{ services_base_dir }}/{{ item.name }}/appsettings.Production.json"
+    owner: "{{ service_user }}"
+    group: "{{ service_group }}"
+    mode: "0640"
   loop: "{{ services }}"
 
 - name: Deploy systemd service units

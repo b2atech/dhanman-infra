@@ -1,0 +1,209 @@
+groups:
+
+  - name: infrastructure
+    rules:
+      - alert: DiskSpaceCritical
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"} /
+           node_filesystem_size_bytes{mountpoint="/",fstype!="tmpfs"}) < 0.10
+        for: 5m
+        labels:
+          severity: critical
+          env: "{{ env }}"
+        annotations:
+          summary: "Disk < 10% free on {{ '{{' }} $labels.host {{ '}}' }}"
+          description: "Disk low — check: df -h"
+
+      - alert: DiskSpaceWarning
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"} /
+           node_filesystem_size_bytes{mountpoint="/",fstype!="tmpfs"}) < 0.25
+        for: 10m
+        labels:
+          severity: warning
+          env: "{{ env }}"
+        annotations:
+          summary: "Disk < 25% free on {{ '{{' }} $labels.host {{ '}}' }}"
+
+      - alert: MemoryCritical
+        expr: |
+          (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) < 0.10
+        for: 5m
+        labels:
+          severity: critical
+          env: "{{ env }}"
+        annotations:
+          summary: "Memory < 10% available on {{ '{{' }} $labels.host {{ '}}' }}"
+
+      - alert: MemoryWarning
+        expr: |
+          (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) < 0.20
+        for: 10m
+        labels:
+          severity: warning
+          env: "{{ env }}"
+        annotations:
+          summary: "Memory < 20% available on {{ '{{' }} $labels.host {{ '}}' }}"
+
+      - alert: CPUSustainedHigh
+        expr: |
+          100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 90
+        for: 10m
+        labels:
+          severity: high
+          env: "{{ env }}"
+        annotations:
+          summary: "CPU > 90% for 10m on {{ '{{' }} $labels.instance {{ '}}' }}"
+
+  - name: dhanman_services
+    rules:
+      - alert: ServiceDown
+        expr: up{job="dhanman_services"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          env: "{{ env }}"
+        annotations:
+          summary: "{{ '{{' }} $labels.service {{ '}}' }} is DOWN on {{ '{{' }} $labels.env {{ '}}' }}"
+          description: "Service has been unreachable for > 1 minute. Check: systemctl status {{ '{{' }} $labels.service {{ '}}' }}-{{ env }}"
+
+      - alert: ServiceHealthCheckFailing
+        expr: probe_success{job="blackbox_http"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          env: "{{ env }}"
+        annotations:
+          summary: "Health check failing: {{ '{{' }} $labels.instance {{ '}}' }}"
+
+      - alert: SSLCertExpiryCritical
+        expr: (probe_ssl_earliest_cert_expiry{job="blackbox_ssl"} - time()) / 86400 < 7
+        for: 1h
+        labels:
+          severity: critical
+          env: "{{ env }}"
+        annotations:
+          summary: "SSL cert expires in < 7 days: {{ '{{' }} $labels.instance {{ '}}' }}"
+          description: "Run: certbot renew"
+
+      - alert: SSLCertExpiryWarning
+        expr: (probe_ssl_earliest_cert_expiry{job="blackbox_ssl"} - time()) / 86400 < 21
+        for: 1h
+        labels:
+          severity: warning
+          env: "{{ env }}"
+        annotations:
+          summary: "SSL cert expires in < 21 days: {{ '{{' }} $labels.instance {{ '}}' }}"
+
+  - name: postgresql
+    rules:
+      - alert: PostgreSQLDown
+        expr: pg_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          env: "{{ env }}"
+        annotations:
+          summary: "PostgreSQL is DOWN on {{ env }}"
+
+      - alert: PostgreSQLHighConnections
+        expr: |
+          sum(pg_stat_activity_count) by (env) /
+          pg_settings_max_connections > 0.80
+        for: 5m
+        labels:
+          severity: high
+          env: "{{ env }}"
+        annotations:
+          summary: "PostgreSQL connections > 80% of max on {{ env }}"
+
+  - name: rabbitmq
+    rules:
+      - alert: RabbitMQDown
+        expr: up{job="rabbitmq"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          env: "{{ env }}"
+        annotations:
+          summary: "RabbitMQ is DOWN on {{ env }}"
+          description: "Check: docker ps | grep rabbitmq"
+
+      - alert: RabbitMQQueueDepthHigh
+        expr: rabbitmq_queue_messages > 1000
+        for: 5m
+        labels:
+          severity: warning
+          env: "{{ env }}"
+        annotations:
+          summary: "Queue {{ '{{' }} $labels.queue {{ '}}' }} has {{ '{{' }} $value {{ '}}' }} messages"
+
+      - alert: RabbitMQDeadLetterMessages
+        expr: rabbitmq_queue_messages{queue=~".*dead.*|.*dlq.*|.*dlx.*"} > 0
+        for: 2m
+        labels:
+          severity: high
+          env: "{{ env }}"
+        annotations:
+          summary: "Dead-letter queue {{ '{{' }} $labels.queue {{ '}}' }} has {{ '{{' }} $value {{ '}}' }} messages — consumer failure"
+
+      - alert: RabbitMQNoConsumers
+        expr: rabbitmq_queue_consumers == 0 AND rabbitmq_queue_messages > 0
+        for: 3m
+        labels:
+          severity: critical
+          env: "{{ env }}"
+        annotations:
+          summary: "Queue {{ '{{' }} $labels.queue {{ '}}' }} has messages but NO consumers — service may be down"
+
+  - name: security
+    rules:
+      - alert: SystemdServiceFailed
+        expr: node_systemd_unit_state{state="failed"} == 1
+        for: 2m
+        labels:
+          severity: critical
+          env: "{{ env }}"
+        annotations:
+          summary: "Systemd unit {{ '{{' }} $labels.name {{ '}}' }} has FAILED on {{ env }}"
+          description: "Run: systemctl status {{ '{{' }} $labels.name {{ '}}' }}"
+
+      - alert: HighConnectionCount
+        expr: node_netstat_Tcp_CurrEstab > 2000
+        for: 5m
+        labels:
+          severity: warning
+          env: "{{ env }}"
+        annotations:
+          summary: "Unusually high TCP connections ({{ '{{' }} $value {{ '}}' }}) on {{ env }}"
+
+      - alert: OOMKillDetected
+        expr: increase(node_vmstat_oom_kill[5m]) > 0
+        labels:
+          severity: critical
+          env: "{{ env }}"
+        annotations:
+          summary: "OOM Killer fired on {{ env }} — a process was killed for using too much memory"
+
+  - name: backup
+    rules:
+      - alert: PostgreSQLBackupMissing
+        expr: time() - pg_backup_last_success_timestamp_seconds{env="{{ env }}"} > 90000
+        for: 5m
+        labels:
+          severity: critical
+          env: "{{ env }}"
+        annotations:
+          summary: "PostgreSQL backup not run in >25h on {{ env }}"
+          description: "Check: tail -50 /var/log/pg_backup.log"
+
+      - alert: PostgreSQLBackupSizeAnomaly
+        expr: |
+          pg_backup_size_bytes{env="{{ env }}"} <
+          (avg_over_time(pg_backup_size_bytes{env="{{ env }}"}[7d]) * 0.5)
+        for: 5m
+        labels:
+          severity: warning
+          env: "{{ env }}"
+        annotations:
+          summary: "PostgreSQL backup is >50% smaller than 7-day average — may be corrupted"

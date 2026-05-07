@@ -5,26 +5,46 @@ networks:
 
 services:
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.52.0
     container_name: prometheus
     restart: unless-stopped
+    network_mode: host
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
       - "--storage.tsdb.retention.time=30d"
       - "--web.listen-address=0.0.0.0:9090"
-    ports:
-      - "127.0.0.1:9090:9090"
+      - "--web.enable-lifecycle"
     volumes:
       - "{{ monitoring_dir }}/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro"
+      - "{{ monitoring_dir }}/prometheus/rules:/etc/prometheus/rules:ro"
       - prometheus_data:/prometheus
-    networks:
-      - monitoring
     logging:
       driver: json-file
       options:
         max-size: "50m"
         max-file: "3"
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: alertmanager
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+      - "--web.listen-address=0.0.0.0:9093"
+    ports:
+      - "127.0.0.1:9093:9093"
+    volumes:
+      - "{{ monitoring_dir }}/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro"
+      - alertmanager_data:/alertmanager
+    networks:
+      - monitoring
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "2"
 
   loki:
     image: grafana/loki:2.9.0
@@ -53,6 +73,7 @@ services:
       - "{{ monitoring_dir }}/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro"
       - /var/log:/var/log:ro
       - /run/systemd/journal:/run/systemd/journal:ro
+      - {{ services_base_dir }}/logs:{{ services_base_dir }}/logs:ro
     networks:
       - monitoring
     logging:
@@ -65,23 +86,71 @@ services:
     image: grafana/grafana:latest
     container_name: grafana
     restart: unless-stopped
+    network_mode: host
     environment:
       GF_SECURITY_ADMIN_USER: "{{ grafana_admin_user }}"
       GF_SECURITY_ADMIN_PASSWORD: "{{ grafana_admin_password }}"
-      GF_SERVER_ROOT_URL: "https://grafana.{{ domain }}"
+      GF_SERVER_ROOT_URL: "https://logs.{{ domain }}"
+      GF_SERVER_HTTP_ADDR: "127.0.0.1"
+      GF_SERVER_HTTP_PORT: "3000"
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_AUTH_ANONYMOUS_ENABLED: "false"
-    ports:
-      - "127.0.0.1:3000:3000"
     volumes:
       - grafana_data:/var/lib/grafana
-    networks:
-      - monitoring
+      - "{{ monitoring_dir }}/grafana/provisioning:/etc/grafana/provisioning:ro"
     logging:
       driver: json-file
       options:
         max-size: "50m"
         max-file: "3"
+
+  blackbox:
+    image: prom/blackbox-exporter:v0.25.0
+    container_name: blackbox
+    restart: unless-stopped
+    command: --config.file=/etc/blackbox/blackbox.yml
+    ports:
+      - "127.0.0.1:9115:9115"
+    volumes:
+      - "{{ monitoring_dir }}/blackbox/blackbox.yml:/etc/blackbox/blackbox.yml:ro"
+    networks:
+      - monitoring
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "2"
+
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:1.1.0
+    container_name: nginx-exporter
+    restart: unless-stopped
+    command:
+      - "--nginx.scrape-uri=http://127.0.0.1:8080/stub_status"
+    ports:
+      - "127.0.0.1:9113:9113"
+    network_mode: host
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "2"
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.62.0
+    container_name: redis-exporter
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: "redis://127.0.0.1:6379"
+      REDIS_PASSWORD: "{{ redis_password }}"
+    ports:
+      - "127.0.0.1:9121:9121"
+    network_mode: host
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "2"
 
   portainer:
     image: portainer/portainer-ce:latest
@@ -112,8 +181,29 @@ services:
         max-size: "20m"
         max-file: "2"
 
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.16.0
+    container_name: postgres-exporter
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - "--no-collector.stat_bgwriter"
+      - "--collector.stat_user_tables"
+      - "--collector.stat_activity_autovacuum"
+      - "--extend.query-path=/queries/queries.yml"
+    volumes:
+      - "{{ monitoring_dir }}/postgres_exporter:/queries:ro"
+    environment:
+      DATA_SOURCE_NAME: "postgresql://postgres_exporter:{{ postgres_exporter_password }}@127.0.0.1:5432/postgres?sslmode=disable"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "2"
+
 volumes:
   prometheus_data:
+  alertmanager_data:
   loki_data:
   grafana_data:
   portainer_data:

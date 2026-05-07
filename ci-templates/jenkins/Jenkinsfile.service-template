@@ -1,0 +1,198 @@
+// =====================================================================
+// DhanMan Service Jenkinsfile Template
+// Replace SERVICE_SLUG, SERVICE_PROJECT, SERVICE_DLL, and PROD_PORT
+// with values specific to each service. Remove firebase block if unused.
+// =====================================================================
+//
+// SERVICE_SLUG   = dhanman-community
+// SERVICE_PROJECT= src/Dhanman.Community.Api/Dhanman.Community.Api.csproj
+// SERVICE_DLL    = Dhanman.Community.Api.dll
+// PROD_PORT      = 5101
+// QA_PORT        = 5201  (or whatever the QA port is)
+//
+// Jenkins credentials required (set once in Manage Credentials):
+//   DO_PROD_HOST     — dm-prd-n IP: 57.129.74.139
+//   DO_FALLBACK_HOST — dm-prd   IP: 51.79.156.217
+//   DO_QA_HOST       — dm-qa    IP: 54.37.159.71
+//   DO_USER          — SSH username (ubuntu)
+//   DO_SSH_KEY       — prod/fallback SSH private key
+//   DO_QA_SSH_KEY    — QA SSH private key
+//   VAULT_ADDRESS_PROD, VAULT_ROLEID_PROD, VAULT_SECRETID_PROD
+//   VAULT_ADDRESS_QA,   VAULT_ROLEID_QA,   VAULT_SECRETID_QA
+//   CONNECTIONSTRINGS__<SERVICE>DB_PROD  (one per DB used by the service)
+//   CONNECTIONSTRINGS__<SERVICE>DB_QA
+// =====================================================================
+
+pipeline {
+    agent any
+
+    options {
+        buildDiscarder(logRotator(daysToKeepStr: '3', numToKeepStr: '10'))
+    }
+
+    parameters {
+        string(name: 'BRANCH_TO_DEPLOY', defaultValue: '', description: 'Branch to deploy (leave blank for default)')
+        booleanParam(name: 'DEPLOY_TEST',     defaultValue: false, description: 'Trigger Test Deployment?')
+        booleanParam(name: 'DEPLOY_PROD',     defaultValue: false, description: 'Trigger Production Deployment?')
+    }
+
+    environment {
+        DO_PROD_HOST     = credentials('DO_PROD_HOST')
+        DO_FALLBACK_HOST = credentials('DO_FALLBACK_HOST')
+        DO_QA_HOST       = credentials('DO_QA_HOST')
+        DO_USER          = credentials('DO_USER')
+        DO_SSH_KEY_ID    = 'DO_SSH_KEY'
+        DO_QA_SSH_KEY_ID = 'DO_QA_SSH_KEY'
+        PATH             = "$HOME/.dotnet:$PATH"
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                script {
+                    if (params.BRANCH_TO_DEPLOY?.trim()) {
+                        checkout([
+                            $class: 'GitSCM',
+                            branches: [[name: params.BRANCH_TO_DEPLOY]],
+                            userRemoteConfigs: [[
+                                url: 'https://github.com/b2atech/SERVICE_SLUG.git',
+                                credentialsId: 'github-credentials'
+                            ]]
+                        ])
+                    } else {
+                        checkout scm
+                    }
+                }
+            }
+        }
+
+        stage('Set up .NET') {
+            steps {
+                sh '''
+                    wget -q https://dot.net/v1/dotnet-install.sh
+                    chmod +x dotnet-install.sh
+                    ./dotnet-install.sh --channel 9.0
+                '''
+            }
+        }
+
+        // -------------------------------------------------------
+        // QA
+        // -------------------------------------------------------
+        stage('Deploy to QA') {
+            when { anyOf { branch 'main'; branch 'develop' } }
+            environment {
+                DOTNET_ENVIRONMENT = 'qa'
+                VAULT_ADDRESS  = credentials('VAULT_ADDRESS_QA')
+                VAULT_ROLEID   = credentials('VAULT_ROLEID_QA')
+                VAULT_SECRETID = credentials('VAULT_SECRETID_QA')
+                // Add DB connection string credentials for QA here
+            }
+            steps {
+                sh '''
+                    dotnet publish SERVICE_PROJECT -c Release -r linux-x64 --self-contained false -o publish
+                    tar -czf publish.tar.gz -C publish .
+                '''
+                sshagent(credentials: [env.DO_QA_SSH_KEY_ID]) {
+                    sh """
+                        scp -o StrictHostKeyChecking=no publish.tar.gz ${DO_USER}@${DO_QA_HOST}:/tmp/
+                        ssh -o StrictHostKeyChecking=no ${DO_USER}@${DO_QA_HOST} 'bash -s' <<'ENDSSH'
+set -e
+sudo mkdir -p /var/www/qa/SERVICE_SLUG
+sudo tar -xzf /tmp/publish.tar.gz -C /var/www/qa/SERVICE_SLUG
+sudo rm /tmp/publish.tar.gz
+sudo tee /var/www/qa/SERVICE_SLUG/.env > /dev/null <<EOT
+DOTNET_ENVIRONMENT=qa
+ASPNETCORE_URLS=http://127.0.0.1:QA_PORT
+Vault__Address=${VAULT_ADDRESS}
+Vault__RoleId=${VAULT_ROLEID}
+Vault__SecretId=${VAULT_SECRETID}
+EOT
+sudo chmod 644 /var/www/qa/SERVICE_SLUG/.env
+sudo systemctl daemon-reload
+sudo systemctl restart SERVICE_SLUG-qa
+ENDSSH
+                    """
+                }
+            }
+        }
+
+        // -------------------------------------------------------
+        // PRODUCTION — deploys to dm-prd-n (primary) then dm-prd (fallback)
+        // -------------------------------------------------------
+        stage('Deploy to Production') {
+            when { expression { return params.DEPLOY_PROD == true } }
+            environment {
+                DOTNET_ENVIRONMENT = 'Production'
+                VAULT_ADDRESS  = credentials('VAULT_ADDRESS_PROD')
+                VAULT_ROLEID   = credentials('VAULT_ROLEID_PROD')
+                VAULT_SECRETID = credentials('VAULT_SECRETID_PROD')
+                // Add DB connection string credentials for prod here
+            }
+            steps {
+                sh '''
+                    dotnet publish SERVICE_PROJECT -c Release -r linux-x64 --self-contained false -o publish
+                    tar -czf publish.tar.gz -C publish .
+                '''
+
+                // --- Primary prod (dm-prd-n) ---
+                sshagent(credentials: [env.DO_SSH_KEY_ID]) {
+                    sh """
+                        scp -o StrictHostKeyChecking=no publish.tar.gz ${DO_USER}@${DO_PROD_HOST}:/tmp/
+                        ssh -o StrictHostKeyChecking=no ${DO_USER}@${DO_PROD_HOST} 'bash -s' <<'ENDSSH'
+set -e
+echo "Deploying SERVICE_SLUG to primary prod (dm-prd-n)..."
+sudo mkdir -p /var/www/prod/SERVICE_SLUG
+sudo tar -xzf /tmp/publish.tar.gz -C /var/www/prod/SERVICE_SLUG
+sudo rm /tmp/publish.tar.gz
+sudo tee /var/www/prod/SERVICE_SLUG/.env > /dev/null <<EOT
+DOTNET_ENVIRONMENT=Production
+ASPNETCORE_URLS=http://127.0.0.1:PROD_PORT
+Vault__Address=${VAULT_ADDRESS}
+Vault__RoleId=${VAULT_ROLEID}
+Vault__SecretId=${VAULT_SECRETID}
+EOT
+sudo chmod 644 /var/www/prod/SERVICE_SLUG/.env
+sudo systemctl daemon-reload
+sudo systemctl restart SERVICE_SLUG-prod
+sudo systemctl status SERVICE_SLUG-prod --no-pager
+ENDSSH
+                    """
+                }
+
+                // --- Fallback prod (dm-prd) — non-blocking ---
+                catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                    sshagent(credentials: [env.DO_SSH_KEY_ID]) {
+                        sh """
+                            scp -o StrictHostKeyChecking=no publish.tar.gz ${DO_USER}@${DO_FALLBACK_HOST}:/tmp/
+                            ssh -o StrictHostKeyChecking=no ${DO_USER}@${DO_FALLBACK_HOST} 'bash -s' <<'ENDSSH'
+set -e
+echo "Deploying SERVICE_SLUG to fallback prod (dm-prd)..."
+sudo mkdir -p /var/www/prod/SERVICE_SLUG
+sudo tar -xzf /tmp/publish.tar.gz -C /var/www/prod/SERVICE_SLUG
+sudo rm /tmp/publish.tar.gz
+sudo tee /var/www/prod/SERVICE_SLUG/.env > /dev/null <<EOT
+DOTNET_ENVIRONMENT=Production
+ASPNETCORE_URLS=http://127.0.0.1:PROD_PORT
+Vault__Address=${VAULT_ADDRESS}
+Vault__RoleId=${VAULT_ROLEID}
+Vault__SecretId=${VAULT_SECRETID}
+EOT
+sudo chmod 644 /var/www/prod/SERVICE_SLUG/.env
+sudo systemctl daemon-reload
+sudo systemctl restart SERVICE_SLUG-prod || true
+ENDSSH
+                        """
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always { cleanWs() }
+        failure { echo 'Deployment failed!' }
+        success { echo 'Deployment succeeded!' }
+    }
+}

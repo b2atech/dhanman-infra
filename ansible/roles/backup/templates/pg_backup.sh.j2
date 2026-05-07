@@ -10,9 +10,12 @@ BACKUP_DATE=$(date +"%F")
 TIMESTAMP=$(date +"%F_%H-%M")
 BACKUP_DIR="{{ postgresql_backup_dir }}/{{ env }}/${BACKUP_DATE}"
 RETENTION_DAYS="{{ postgresql_backup_retention_days }}"
+TEXTFILE_DIR="/var/lib/prometheus/node-exporter"
 
 mkdir -p "${BACKUP_DIR}"
 echo "[$(date)] Starting PostgreSQL backup — {{ env }}"
+
+TOTAL_SIZE=0
 
 {% for svc in services %}
 DB="{{ env }}-dhanman-{{ svc.name | replace('dhanman-', '') }}"
@@ -20,7 +23,20 @@ echo "[$(date)] Backing up ${DB}"
 pg_dump -h "${PGHOST}" -U "${PGUSER}" -p "${PGPORT}" \
   -F c -b -d "${DB}" \
   -f "${BACKUP_DIR}/${DB}-${TIMESTAMP}.backup"
+TOTAL_SIZE=$((TOTAL_SIZE + $(stat -c%s "${BACKUP_DIR}/${DB}-${TIMESTAMP}.backup" 2>/dev/null || echo 0)))
 {% endfor %}
 
 find "{{ postgresql_backup_dir }}/{{ env }}/" -type d -mtime "+${RETENTION_DAYS}" -exec rm -rf {} + 2>/dev/null || true
 echo "[$(date)] Backup complete — ${BACKUP_DIR}"
+
+# Write Prometheus textfile metrics for backup monitoring
+if [ -d "${TEXTFILE_DIR}" ]; then
+  cat > "${TEXTFILE_DIR}/pg_backup.prom" <<EOF
+# HELP pg_backup_last_success_timestamp_seconds Unix timestamp of last successful PostgreSQL backup
+# TYPE pg_backup_last_success_timestamp_seconds gauge
+pg_backup_last_success_timestamp_seconds{env="{{ env }}"} $(date +%s)
+# HELP pg_backup_size_bytes Total size in bytes of the latest PostgreSQL backup set
+# TYPE pg_backup_size_bytes gauge
+pg_backup_size_bytes{env="{{ env }}"} ${TOTAL_SIZE}
+EOF
+fi

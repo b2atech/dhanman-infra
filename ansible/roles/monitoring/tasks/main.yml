@@ -11,12 +11,33 @@
     - "{{ monitoring_dir }}/loki"
     - "{{ monitoring_dir }}/promtail"
     - "{{ monitoring_dir }}/prometheus"
+    - "{{ monitoring_dir }}/prometheus/rules"
+    - "{{ monitoring_dir }}/alertmanager"
+    - "{{ monitoring_dir }}/blackbox"
     - "{{ monitoring_dir }}/grafana"
+    - "{{ monitoring_dir }}/grafana/provisioning"
+    - "{{ monitoring_dir }}/grafana/provisioning/datasources"
+    - "{{ monitoring_dir }}/grafana/provisioning/dashboards"
+    - "{{ monitoring_dir }}/postgres_exporter"
 
 - name: Deploy Prometheus config
   template:
     src: prometheus.yml.j2
     dest: "{{ monitoring_dir }}/prometheus/prometheus.yml"
+    mode: "0644"
+  notify: restart monitoring stack
+
+- name: Deploy Prometheus alert rules
+  template:
+    src: alert-rules.yml.j2
+    dest: "{{ monitoring_dir }}/prometheus/rules/alert-rules.yml"
+    mode: "0644"
+  notify: reload prometheus
+
+- name: Deploy Alertmanager config
+  template:
+    src: alertmanager.yml.j2
+    dest: "{{ monitoring_dir }}/alertmanager/alertmanager.yml"
     mode: "0644"
   notify: restart monitoring stack
 
@@ -34,12 +55,50 @@
     mode: "0644"
   notify: restart monitoring stack
 
+- name: Deploy Blackbox exporter config
+  template:
+    src: blackbox.yml.j2
+    dest: "{{ monitoring_dir }}/blackbox/blackbox.yml"
+    mode: "0644"
+  notify: restart monitoring stack
+
+- name: Deploy postgres_exporter custom queries (PG18 compatible)
+  template:
+    src: postgres-exporter-queries.yml.j2
+    dest: "{{ monitoring_dir }}/postgres_exporter/queries.yml"
+    mode: "0644"
+  notify: restart postgres_exporter
+
+- name: Deploy Grafana datasource provisioning
+  template:
+    src: grafana-datasources.yml.j2
+    dest: "{{ monitoring_dir }}/grafana/provisioning/datasources/datasources.yml"
+    mode: "0644"
+  notify: restart grafana
+
 - name: Deploy monitoring docker-compose
   template:
     src: docker-compose.yml.j2
     dest: "{{ monitoring_dir }}/docker-compose.yml"
     mode: "0644"
   notify: restart monitoring stack
+
+- name: Ensure postgres_exporter DB user exists
+  community.postgresql.postgresql_user:
+    name: postgres_exporter
+    password: "{{ postgres_exporter_password }}"
+    role_attr_flags: LOGIN
+    state: present
+  become: true
+  become_user: postgres
+
+- name: Grant pg_monitor to postgres_exporter
+  community.postgresql.postgresql_membership:
+    group: pg_monitor
+    target_role: postgres_exporter
+    state: present
+  become: true
+  become_user: postgres
 
 - name: Start monitoring stack
   community.docker.docker_compose_v2:
@@ -52,9 +111,63 @@
     state: present
     update_cache: yes
 
+- name: Configure node_exporter with textfile collector
+  lineinfile:
+    path: /etc/default/prometheus-node-exporter
+    regexp: '^ARGS='
+    line: 'ARGS="--collector.textfile.directory=/var/lib/prometheus/node-exporter/"'
+    create: yes
+  notify: restart node_exporter
+
+- name: Create node_exporter textfile directory
+  file:
+    path: /var/lib/prometheus/node-exporter
+    state: directory
+    owner: prometheus
+    group: prometheus
+    mode: "0755"
+
 - name: Enable and start node_exporter
   systemd:
     name: prometheus-node-exporter
     enabled: yes
     state: started
 
+- name: Wait for Grafana to be ready
+  uri:
+    url: "http://127.0.0.1:3000/api/health"
+    status_code: 200
+  register: grafana_health
+  until: grafana_health.status == 200
+  retries: 30
+  delay: 5
+
+- name: Import community dashboards into Grafana
+  shell: |
+    curl -sf https://grafana.com/api/dashboards/{{ item.id }}/revisions/latest/download \
+    | python3 -c "
+    import json, sys
+    d = json.load(sys.stdin)
+    inputs = [
+        {'name': i['name'], 'type': i['type'], 'pluginId': i.get('pluginId', ''), 'value': 'Prometheus'}
+        for i in d.get('__inputs', [])
+        if i.get('type') == 'datasource' and 'prometheus' in i.get('pluginId', '').lower()
+    ]
+    if not inputs:
+        inputs = [{'name': 'DS_PROMETHEUS', 'type': 'datasource', 'pluginId': 'prometheus', 'value': 'Prometheus'}]
+    print(json.dumps({'dashboard': d, 'overwrite': True, 'inputs': inputs, 'folderId': 0}))
+    " | curl -sf -X POST http://127.0.0.1:3000/api/dashboards/import \
+        -H 'Content-Type: application/json' \
+        -u '{{ grafana_admin_user }}:{{ grafana_admin_password }}' \
+        -d @-
+  args:
+    executable: /bin/bash
+  register: dash_import
+  changed_when: "'imported' in dash_import.stdout or 'updated' in dash_import.stdout"
+  failed_when: dash_import.rc != 0 and 'already' not in dash_import.stderr | default('')
+  loop:
+    - { id: 1860,  name: "Node Exporter Full" }
+    - { id: 455,   name: "PostgreSQL Database" }
+    - { id: 763,   name: "Redis Dashboard" }
+    - { id: 10991, name: "RabbitMQ Overview" }
+    - { id: 12708, name: "NGINX Prometheus Exporter" }

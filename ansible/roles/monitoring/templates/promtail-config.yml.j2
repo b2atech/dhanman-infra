@@ -7,8 +7,56 @@ positions:
 
 clients:
   - url: http://loki:3100/loki/api/v1/push
+    batchsize: 1048576
+    batchwait: 5s
+    timeout: 10s
 
 scrape_configs:
+  - job_name: dhanman-logs
+    pipeline_stages:
+      # Extract service name from filename (e.g. dhanman-community-20260507.log)
+      - regex:
+          expression: 'dhanman-(?P<service_name>[^-]+)-\d+\.log'
+          source: filename
+      # Extract level — works for both CLEF (@l) and standard JSON (Level)
+      - regex:
+          expression: '"(?:@l|Level)":"(?P<Level>[^"]+)"'
+      # Default to Information when @l absent (CLEF omits it for Information-level logs)
+      - template:
+          source: Level
+          template: '{{ if .Value }}{{ .Value }}{{ else }}Information{{ end }}'
+      - labels:
+          service_name: ""
+          Level: ""
+      - static_labels:
+          log_type: "application"
+    static_configs:
+      - targets: [localhost]
+        labels:
+          env: "{{ env }}"
+          __path__: "{{ services_base_dir }}/logs/dhanman-*.log"
+
+  - job_name: nginx
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: nginx
+          env: "{{ env }}"
+          __path__: /var/log/nginx/*.log
+
+  - job_name: postgresql
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: postgresql
+          env: "{{ env }}"
+          log_type: "postgres"
+          __path__: /var/log/postgresql/*.log
+    pipeline_stages:
+      - multiline:
+          firstline: '^\d{4}-\d{2}-\d{2}'
+          max_wait_time: 3s
+
   - job_name: systemd-journal
     journal:
       max_age: 12h
@@ -19,21 +67,3 @@ scrape_configs:
     relabel_configs:
       - source_labels: [__journal__systemd_unit]
         target_label: unit
-
-  - job_name: dhanman-services
-    static_configs:
-      - targets:
-          - localhost
-        labels:
-          job: dhanman
-          env: "{{ env }}"
-          __path__: /var/log/dhanman/*.log
-
-  - job_name: nginx
-    static_configs:
-      - targets:
-          - localhost
-        labels:
-          job: nginx
-          env: "{{ env }}"
-          __path__: /var/log/nginx/*.log

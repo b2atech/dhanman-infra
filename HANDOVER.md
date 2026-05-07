@@ -99,17 +99,50 @@ vault operator unseal 'wVjzW/SEffsH42zXh/UgIM5NZn93StO6s4bKJehBj3k='
    sudo nginx -t && sudo systemctl reload nginx
    ```
 
-2. **Configure Grafana Loki + Prometheus data sources** (first login at grafana.dhanman.com once DNS is up)
+2. ~~Configure Grafana datasources~~ — **Done**. Prometheus + Loki auto-provisioned via Ansible.
+   Dashboards imported: Node Exporter Full, PostgreSQL, Redis, RabbitMQ, NGINX.
 
 3. **Set up pg_hba.conf in Ansible** — the `57.129.74.139/32` rules were added manually. Add them to the postgresql role so they survive reprovisioning.
 
-4. **Configure PgBouncer userlist** (for future connection pooling):
+4. **PgBouncer connection pooling** — PgBouncer is running on port 6432 but apps connect directly to 5432. Full guide below.
+
+   #### Why apps bypass PgBouncer
+   MassTransit (used by all services for messaging) relies on PostgreSQL `LISTEN/NOTIFY`. PgBouncer
+   in **transaction mode** does not support `LISTEN/NOTIFY` — connections holding a LISTEN subscription
+   are not returned to the pool, breaking the entire pooling benefit.
+
+   #### Two options to enable PgBouncer properly
+
+   **Option A — Switch MassTransit to RabbitMQ transport (recommended)**
+   The services already have RabbitMQ configured. Remove the MassTransit PostgreSQL transport
+   dependency and all `LISTEN/NOTIFY` usage disappears. Then PgBouncer transaction mode works.
+   After that, update connection strings:
+
+   *Step 1 — Update Vault secrets* (`secret/shared/databases`): change port `5432` → `6432` in all
+   connection strings, and append Npgsql options:
+   ```
+   Server=127.0.0.1;Port=6432;Database=prod-dhanman-common;User Id=dhanmanprod;
+   Password=...;MaxAutoPrepare=0;No Reset On Close=true
+   ```
+   `MaxAutoPrepare=0` disables EF Core prepared statements (not supported in transaction mode).
+   `No Reset On Close=true` prevents Npgsql from issuing DISCARD ALL on connection return.
+
+   *Step 2 — Update PgBouncer userlist*:
    ```bash
-   # Get SCRAM hash from PostgreSQL
-   sudo -u postgres psql -c "SELECT passwd FROM pg_shadow WHERE usename='dhanmanprod';" | grep SCRAM > /etc/pgbouncer/userlist.txt
+   sudo -u postgres psql -c "SELECT '\"' || usename || '\" \"' || passwd || '\"' FROM pg_shadow WHERE usename='dhanmanprod';" \
+     | grep dhanmanprod | sudo tee /etc/pgbouncer/userlist.txt
    sudo systemctl reload pgbouncer
    ```
-   Then update Vault DB connections back to port 6432 (requires app changes for LISTEN/NOTIFY).
+
+   *Step 3 — Redeploy all services* via Ansible.
+
+   **Option B — Switch to PgBouncer session mode**
+   Session mode supports `LISTEN/NOTIFY` but provides less pooling benefit (one server connection
+   per client session). Change `pool_mode = session` in `/etc/pgbouncer/pgbouncer.ini`. No app
+   changes needed, but you lose transaction-level pooling efficiency.
+
+   #### Current connection string location
+   Stored in Vault at `secret/shared/databases`. All strings currently use `Port=5432`.
 
 5. **Update Jenkins** on dm-prd to deploy to dm-prd-n instead of dm-prd. Change the deployment target IP/path in Jenkins pipelines.
 

@@ -1,0 +1,17 @@
+{
+  "Serilog": {
+    "MinimumLevel": {
+      "Default": "Information",
+      "Override": {
+        "Microsoft": "Warning",
+        "System": "Warning"
+      }
+    },
+    "Filter": [
+      {
+        "Name": "ByExcluding",
+        "Args": { "expression": "RequestPath = '/metrics' or RequestPath = '/health'" }
+      }
+    ]
+  }
+}

@@ -14,7 +14,7 @@ SyslogIdentifier={{ item.name }}-{{ env }}
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
-ReadWritePaths={{ services_base_dir }}/{{ item.name }}
+ReadWritePaths={{ services_base_dir }}/{{ item.name }} {{ services_base_dir }}/logs
 
 [Install]
 WantedBy=multi-user.target
