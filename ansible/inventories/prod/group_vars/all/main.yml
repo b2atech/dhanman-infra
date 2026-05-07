@@ -116,5 +116,6 @@ infra_vhosts:
     max_body_size: 1024m
   - subdomain: portainer
     port: 9443
+    https_backend: true
   - subdomain: status
     port: 3001
