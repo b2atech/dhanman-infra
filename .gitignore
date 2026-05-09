@@ -1,0 +1,12 @@
+*.tar.gz
+*.dump
+*.bak
+*.backup
+*.log
+
+snapshots/audits/**/archive/
+snapshots/restore-reports/**/output/
+snapshots/tmp/
+
+configs/backup/rclone/rclone.conf
+configs/backup/**/*.local

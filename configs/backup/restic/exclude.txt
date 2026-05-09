@@ -1,0 +1,9 @@
+# Cache and transient paths
+tmp/
+temp/
+cache/
+logs/
+node_modules/
+
+# Backup outputs should not back up themselves
+backups/
