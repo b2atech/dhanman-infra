@@ -1,0 +1,68 @@
+---
+- name: Install Redis
+  apt:
+    name: redis-server
+    state: present
+    update_cache: yes
+
+- name: Bind Redis to localhost only
+  lineinfile:
+    path: /etc/redis/redis.conf
+    regexp: "^bind "
+    line: "bind 127.0.0.1 ::1"
+  notify: restart redis
+
+- name: Enable Redis protected mode
+  lineinfile:
+    path: /etc/redis/redis.conf
+    regexp: "^protected-mode"
+    line: "protected-mode yes"
+  notify: restart redis
+
+- name: Enable AOF persistence
+  lineinfile:
+    path: /etc/redis/redis.conf
+    regexp: "^appendonly"
+    line: "appendonly yes"
+  notify: restart redis
+
+- name: Set AOF fsync to everysec
+  lineinfile:
+    path: /etc/redis/redis.conf
+    regexp: "^appendfsync"
+    line: "appendfsync everysec"
+  notify: restart redis
+
+- name: Disable RDB snapshots
+  lineinfile:
+    path: /etc/redis/redis.conf
+    regexp: "^save "
+    line: "# save disabled — using AOF"
+    backrefs: no
+  notify: restart redis
+
+- name: Disable dangerous Redis commands
+  blockinfile:
+    path: /etc/redis/redis.conf
+    marker: "# {mark} ANSIBLE MANAGED — disabled commands"
+    block: |
+      rename-command FLUSHALL ""
+      rename-command FLUSHDB  ""
+      rename-command CONFIG   ""
+      rename-command KEYS     ""
+  notify: restart redis
+
+- name: Set Redis password
+  lineinfile:
+    path: /etc/redis/redis.conf
+    regexp: "^requirepass"
+    line: "requirepass {{ redis_password }}"
+  when: redis_password is defined and redis_password != ''
+  notify: restart redis
+
+- name: Enable and start Redis
+  systemd:
+    name: redis-server
+    enabled: yes
+    state: started
+

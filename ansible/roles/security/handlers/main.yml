@@ -1,0 +1,16 @@
+---
+- name: restart fail2ban
+  systemd:
+    name: fail2ban
+    state: restarted
+
+- name: restart sshd
+  systemd:
+    name: ssh
+    state: reloaded
+
+- name: restart redis
+  systemd:
+    name: redis-server
+    state: restarted
+  ignore_errors: yes

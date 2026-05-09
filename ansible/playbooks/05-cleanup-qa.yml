@@ -1,0 +1,34 @@
+---
+# Clean up QA server after replica migration to dm-prd
+# Removes old PostgreSQL replica from dm-qa (not needed anymore)
+# Run ONLY after 04-setup-replica has been verified on dm-prd
+# Usage: ansible-playbook -i inventories/qa playbooks/05-cleanup-qa.yml
+
+- name: Remove PostgreSQL replica from QA
+  hosts: dhanman_qa
+  become: true
+  tasks:
+    - name: Stop PostgreSQL on QA
+      systemd:
+        name: "postgresql@{{ postgresql_version }}-{{ postgresql_cluster }}"
+        state: stopped
+        enabled: no
+      ignore_errors: true
+
+    - name: Remove PostgreSQL packages from QA
+      apt:
+        name:
+          - "postgresql-{{ postgresql_version }}"
+          - postgresql-client-common
+          - postgresql-common
+        state: absent
+        autoremove: yes
+
+    - name: Remove PostgreSQL data from QA
+      file:
+        path: /var/lib/postgresql
+        state: absent
+
+    - name: Note remaining RAM freed
+      debug:
+        msg: "PostgreSQL removed from QA — ~{{ ansible_memtotal_mb // 4 }}MB RAM freed for QA services"

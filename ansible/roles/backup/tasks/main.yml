@@ -1,0 +1,52 @@
+---
+- name: Create backup directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  loop:
+    - "{{ postgresql_backup_dir }}"
+    - "{{ minio_backup_dir }}"
+    - /opt/scripts
+
+- name: Create node_exporter textfile directory for backup metrics
+  file:
+    path: /var/lib/prometheus/node-exporter
+    state: directory
+    owner: prometheus
+    group: prometheus
+    mode: "0755"
+
+- name: Deploy PostgreSQL backup script
+  template:
+    src: pg_backup.sh.j2
+    dest: /opt/scripts/pg_backup.sh
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Deploy MinIO backup script
+  template:
+    src: minio_backup.sh.j2
+    dest: /opt/scripts/minio_backup.sh
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Schedule PostgreSQL backup cron
+  cron:
+    name: "PostgreSQL nightly backup"
+    minute: "0"
+    hour: "2"
+    job: "/opt/scripts/pg_backup.sh >> /var/log/pg_backup.log 2>&1"
+    user: postgres
+
+- name: Schedule MinIO backup cron
+  cron:
+    name: "MinIO nightly backup"
+    minute: "30"
+    hour: "2"
+    job: "/opt/scripts/minio_backup.sh >> /var/log/minio_backup.log 2>&1"
+    user: root

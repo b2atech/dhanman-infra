@@ -1,0 +1,39 @@
+---
+# Zero-downtime rolling restart for a single service (blue-green)
+# Usage:
+#   ansible-playbook -i inventories/prod playbooks/deploy-service.yml \
+#     -e "service_name=dhanman-common"
+#
+# Jenkins calls this after copying the new binary to the server.
+
+- name: Deploy single DhanMan service
+  hosts: all
+  become: true
+  vars:
+    target_service: "{{ service_name | mandatory('Pass -e service_name=<name>') }}"
+  tasks:
+    - name: Reload systemd daemon
+      systemd:
+        daemon_reload: yes
+
+    - name: Restart target service
+      systemd:
+        name: "{{ target_service }}"
+        state: restarted
+
+    - name: Wait for service to become healthy
+      wait_for:
+        port: "{{ (services | selectattr('name', 'equalto', target_service) | first).port }}"
+        host: 127.0.0.1
+        delay: 3
+        timeout: 60
+
+    - name: Confirm service is running
+      systemd:
+        name: "{{ target_service }}"
+      register: svc_status
+
+    - name: Fail if service did not start
+      fail:
+        msg: "{{ target_service }} failed to start. Check: journalctl -u {{ target_service }} -n 50"
+      when: svc_status.status.ActiveState != "active"

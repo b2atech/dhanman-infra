@@ -1,0 +1,49 @@
+---
+- name: Download and dearmor HashiCorp GPG key
+  shell: |
+    curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+  args:
+    creates: /usr/share/keyrings/hashicorp-archive-keyring.gpg
+
+- name: Add HashiCorp apt repository
+  apt_repository:
+    repo: "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com {{ vault_apt_codename | default(ansible_distribution_release) }} main"
+    state: present
+    filename: hashicorp
+
+- name: Install Vault
+  apt:
+    name: vault
+    state: present
+    update_cache: yes
+
+- name: Create Vault data directory
+  file:
+    path: "{{ vault_storage_path }}"
+    state: directory
+    owner: vault
+    group: vault
+    mode: "0750"
+
+- name: Create Vault policies directory
+  file:
+    path: /etc/vault/policies
+    state: directory
+    owner: vault
+    group: vault
+    mode: "0750"
+
+- name: Deploy Vault config
+  template:
+    src: vault.hcl.j2
+    dest: /etc/vault.d/vault.hcl
+    owner: vault
+    group: vault
+    mode: "0640"
+  notify: restart vault
+
+- name: Enable and start Vault
+  systemd:
+    name: vault
+    enabled: yes
+    state: started

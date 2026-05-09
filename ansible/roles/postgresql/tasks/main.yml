@@ -1,0 +1,139 @@
+---
+- name: Ensure keyrings directory exists
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+  when: postgresql_use_pgdg | default(true)
+
+- name: Add PostgreSQL GPG key
+  get_url:
+    url: https://www.postgresql.org/media/keys/ACCC4CF8.asc
+    dest: /etc/apt/keyrings/postgresql.asc
+    mode: "0644"
+  when: postgresql_use_pgdg | default(true)
+
+- name: Add PostgreSQL apt repository
+  apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/postgresql.asc] http://apt.postgresql.org/pub/repos/apt {{ postgresql_pgdg_codename | default(ansible_distribution_release) }}-pgdg main"
+    state: present
+    filename: pgdg
+  when: postgresql_use_pgdg | default(true)
+
+# libicu74 needed by pgdg noble PG18 packages on Ubuntu 25.04 (plucky has libicu76)
+- name: Install libicu74 compatibility library
+  apt:
+    deb: "http://archive.ubuntu.com/ubuntu/pool/main/i/icu/libicu74_74.2-1ubuntu3_amd64.deb"
+    state: present
+  when:
+    - postgresql_use_pgdg | default(true)
+    - postgresql_pgdg_codename | default('') == 'noble'
+    - ansible_distribution_release == 'plucky'
+
+- name: Install PostgreSQL {{ postgresql_version }}
+  apt:
+    name:
+      - "postgresql-{{ postgresql_version }}"
+      - "postgresql-client-{{ postgresql_version }}"
+      - "postgresql-{{ postgresql_version }}-pgvector"
+      - "postgresql-{{ postgresql_version }}-cron"
+      - pgbouncer
+    state: present
+    update_cache: yes
+
+- name: Configure listen_addresses
+  lineinfile:
+    path: "/etc/postgresql/{{ postgresql_version }}/main/postgresql.conf"
+    regexp: "^#?listen_addresses"
+    line: "listen_addresses = '{{ postgresql_listen_addresses }}'"
+  notify: restart postgresql
+
+- name: Configure shared_buffers
+  lineinfile:
+    path: "/etc/postgresql/{{ postgresql_version }}/main/postgresql.conf"
+    regexp: "^#?shared_buffers"
+    line: "shared_buffers = {{ (ansible_memtotal_mb * 0.25) | int }}MB"
+  notify: restart postgresql
+
+- name: Configure max_connections
+  lineinfile:
+    path: "/etc/postgresql/{{ postgresql_version }}/main/postgresql.conf"
+    regexp: "^#?max_connections"
+    line: "max_connections = 200"
+  notify: restart postgresql
+
+- name: Configure WAL level for replication
+  lineinfile:
+    path: "/etc/postgresql/{{ postgresql_version }}/main/postgresql.conf"
+    regexp: "^#?wal_level"
+    line: "wal_level = replica"
+  notify: restart postgresql
+
+- name: Configure max_wal_senders
+  lineinfile:
+    path: "/etc/postgresql/{{ postgresql_version }}/main/postgresql.conf"
+    regexp: "^#?max_wal_senders"
+    line: "max_wal_senders = 3"
+  notify: restart postgresql
+
+- name: Configure wal_keep_size
+  lineinfile:
+    path: "/etc/postgresql/{{ postgresql_version }}/main/postgresql.conf"
+    regexp: "^#?wal_keep_size"
+    line: "wal_keep_size = 1GB"
+  notify: restart postgresql
+
+- name: Deploy pg_hba.conf
+  template:
+    src: pg_hba.conf.j2
+    dest: "/etc/postgresql/{{ postgresql_version }}/main/pg_hba.conf"
+    owner: postgres
+    group: postgres
+    mode: "0640"
+  notify: restart postgresql
+
+- name: Deploy PgBouncer config
+  template:
+    src: pgbouncer.ini.j2
+    dest: /etc/pgbouncer/pgbouncer.ini
+    owner: postgres
+    group: postgres
+    mode: "0640"
+  notify: restart pgbouncer
+
+- name: Create backup directory
+  file:
+    path: "{{ postgresql_backup_dir }}"
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: "0750"
+
+- name: Deploy backup script
+  template:
+    src: pg_backup.sh.j2
+    dest: /opt/scripts/pg_backup.sh
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Schedule PostgreSQL backup cron
+  cron:
+    name: postgresql_daily_backup
+    user: postgres
+    minute: "0"
+    hour: "2"
+    job: "/opt/scripts/pg_backup.sh >> /var/log/pg_backup.log 2>&1"
+    state: present
+
+- name: Enable and start PostgreSQL
+  systemd:
+    name: postgresql
+    enabled: yes
+    state: started
+
+- name: Enable and start PgBouncer
+  systemd:
+    name: pgbouncer
+    enabled: yes
+    state: started

@@ -1,0 +1,47 @@
+---
+# Configure dm-prd (51.79.156.217) as streaming replica of dm-prd-n (57.129.74.139)
+# Run AFTER dm-prd-n primary is fully set up and Vault is unsealed
+# Usage: ansible-playbook -i inventories/fallback playbooks/04-setup-replica.yml
+
+- name: Configure PostgreSQL streaming replica
+  hosts: dhanman_fallback
+  become: true
+  vars:
+    postgresql_replication_mode: replica
+    postgresql_primary_host: 57.129.74.139
+  tasks:
+    - name: Stop PostgreSQL on replica
+      systemd:
+        name: "postgresql@{{ postgresql_version }}-{{ postgresql_cluster }}"
+        state: stopped
+
+    - name: Remove existing replica data directory
+      file:
+        path: "/var/lib/postgresql/{{ postgresql_version }}/{{ postgresql_cluster }}"
+        state: absent
+
+    - name: Base backup from primary
+      become_user: postgres
+      command: >
+        pg_basebackup
+          -h {{ postgresql_primary_host }}
+          -U replicator
+          -D /var/lib/postgresql/{{ postgresql_version }}/{{ postgresql_cluster }}
+          -P -Xs -R
+      environment:
+        PGPASSFILE: /var/lib/postgresql/.pgpass
+
+    - name: Start PostgreSQL replica
+      systemd:
+        name: "postgresql@{{ postgresql_version }}-{{ postgresql_cluster }}"
+        state: started
+        enabled: yes
+
+    - name: Verify replica is in recovery
+      become_user: postgres
+      command: psql -c "SELECT pg_is_in_recovery();"
+      register: recovery_check
+
+    - name: Show recovery status
+      debug:
+        msg: "{{ recovery_check.stdout }}"

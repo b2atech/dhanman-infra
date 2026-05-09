@@ -1,0 +1,27 @@
+#!/bin/bash
+# MinIO backup — managed by Ansible
+set -euo pipefail
+
+TIMESTAMP=$(date +"%F_%H-%M")
+BACKUP_DATE=$(date +"%F")
+BACKUP_DIR="{{ minio_backup_dir }}/{{ env }}/${BACKUP_DATE}"
+RETENTION_DAYS="{{ minio_backup_retention_days }}"
+MC_ALIAS="local"
+
+mkdir -p "${BACKUP_DIR}"
+echo "[$(date)] Starting MinIO backup — {{ env }}"
+
+# Configure mc alias using credentials from environment / Vault-injected .env
+if [ -f /etc/minio-backup.env ]; then
+  source /etc/minio-backup.env
+fi
+
+mc alias set "${MC_ALIAS}" "http://127.0.0.1:9000" "${MINIO_ACCESS_KEY}" "${MINIO_SECRET_KEY}" --quiet
+
+for bucket in $(mc ls "${MC_ALIAS}" --json | jq -r '.key | rtrimstr("/")'); do
+  echo "[$(date)] Syncing bucket: ${bucket}"
+  mc mirror --quiet "${MC_ALIAS}/${bucket}" "${BACKUP_DIR}/${bucket}/"
+done
+
+find "{{ minio_backup_dir }}/{{ env }}/" -maxdepth 1 -type d -mtime "+${RETENTION_DAYS}" -exec rm -rf {} + 2>/dev/null || true
+echo "[$(date)] MinIO backup complete — ${BACKUP_DIR}"

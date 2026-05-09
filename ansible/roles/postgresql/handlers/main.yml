@@ -1,0 +1,10 @@
+---
+- name: restart postgresql
+  systemd:
+    name: postgresql
+    state: restarted
+
+- name: restart pgbouncer
+  systemd:
+    name: pgbouncer
+    state: restarted

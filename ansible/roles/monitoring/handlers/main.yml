@@ -1,0 +1,33 @@
+---
+- name: restart monitoring stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ monitoring_dir }}"
+    state: present
+    recreate: always
+
+- name: restart grafana
+  community.docker.docker_compose_v2:
+    project_src: "{{ monitoring_dir }}"
+    state: present
+    recreate: always
+    services:
+      - grafana
+
+- name: reload prometheus
+  uri:
+    url: "http://127.0.0.1:9090/-/reload"
+    method: POST
+    status_code: 200
+
+- name: restart node_exporter
+  systemd:
+    name: prometheus-node-exporter
+    state: restarted
+
+- name: restart postgres_exporter
+  community.docker.docker_compose_v2:
+    project_src: "{{ monitoring_dir }}"
+    state: present
+    recreate: always
+    services:
+      - postgres-exporter

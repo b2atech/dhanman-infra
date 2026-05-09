@@ -1,0 +1,114 @@
+---
+- name: Enable UFW with default deny
+  ufw:
+    state: enabled
+    policy: deny
+    direction: incoming
+
+- name: Allow outgoing traffic
+  ufw:
+    state: enabled
+    policy: allow
+    direction: outgoing
+
+- name: Allow public ports
+  ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+    comment: "{{ item.comment }}"
+  loop: "{{ ufw_allowed_ports }}"
+
+- name: Deny PostgreSQL from public
+  ufw:
+    rule: deny
+    port: "5432"
+    proto: tcp
+
+- name: Deny Redis from public
+  ufw:
+    rule: deny
+    port: "6379"
+    proto: tcp
+
+- name: Deny RabbitMQ management from public
+  ufw:
+    rule: deny
+    port: "15672"
+    proto: tcp
+
+- name: Deny Vault from public
+  ufw:
+    rule: deny
+    port: "8200"
+    proto: tcp
+
+- name: Deny Prometheus from public
+  ufw:
+    rule: deny
+    port: "9090"
+    proto: tcp
+
+- name: Deny Netdata from public
+  ufw:
+    rule: deny
+    port: "19999"
+    proto: tcp
+
+- name: Configure fail2ban SSH jail
+  copy:
+    dest: /etc/fail2ban/jail.d/sshd.conf
+    content: |
+      [sshd]
+      enabled  = true
+      port     = ssh
+      filter   = sshd
+      logpath  = /var/log/auth.log
+      maxretry = 5
+      bantime  = 3600
+      findtime = 600
+  notify: restart fail2ban
+
+- name: Enable and start fail2ban
+  systemd:
+    name: fail2ban
+    enabled: yes
+    state: started
+
+- name: Harden sshd - disable root login
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^#?PermitRootLogin"
+    line: "PermitRootLogin no"
+  notify: restart sshd
+
+- name: Harden sshd - disable password auth
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^#?PasswordAuthentication"
+    line: "PasswordAuthentication no"
+  notify: restart sshd
+
+- name: Harden sshd - disable empty passwords
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^#?PermitEmptyPasswords"
+    line: "PermitEmptyPasswords no"
+  notify: restart sshd
+
+- name: Bind Redis to localhost only
+  lineinfile:
+    path: /etc/redis/redis.conf
+    regexp: "^bind "
+    line: "bind 127.0.0.1 ::1"
+  notify: restart redis
+  ignore_errors: yes
+
+- name: Enable Redis protected mode
+  lineinfile:
+    path: /etc/redis/redis.conf
+    regexp: "^protected-mode"
+    line: "protected-mode yes"
+  notify: restart redis
+  ignore_errors: yes
+

@@ -1,3 +1,89 @@
-- name: common role placeholder
-  debug:
-    msg: "common role running - placeholder only"
+---
+- name: Set hostname
+  hostname:
+    name: "{{ inventory_hostname }}"
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install baseline packages
+  apt:
+    name:
+      - curl
+      - wget
+      - git
+      - unzip
+      - htop
+      - vim
+      - jq
+      - ca-certificates
+      - gnupg
+      - lsb-release
+      - apt-transport-https
+      - software-properties-common
+      - sysstat
+      - rsyslog
+      - logrotate
+      - cron
+      - ufw
+      - fail2ban
+    state: present
+
+- name: Set timezone to Asia/Kolkata
+  timezone:
+    name: Asia/Kolkata
+
+- name: Create service base directory
+  file:
+    path: "{{ services_base_dir }}"
+    state: directory
+    owner: "{{ service_user }}"
+    group: "{{ service_group }}"
+    mode: "0755"
+
+- name: Create logs directory
+  file:
+    path: /var/www/logs
+    state: directory
+    owner: "{{ service_user }}"
+    group: "{{ service_group }}"
+    mode: "0755"
+
+- name: Create scripts directory
+  file:
+    path: /opt/scripts
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Create backups directory
+  file:
+    path: /opt/backups
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Configure journald persistent logging
+  lineinfile:
+    path: /etc/systemd/journald.conf
+    regexp: "^#?Storage="
+    line: "Storage=persistent"
+  notify: restart journald
+
+- name: Configure journald max disk use
+  lineinfile:
+    path: /etc/systemd/journald.conf
+    regexp: "^#?SystemMaxUse="
+    line: "SystemMaxUse=2G"
+  notify: restart journald
+
+- name: Enable sysstat
+  systemd:
+    name: sysstat
+    enabled: yes
+    state: started
+

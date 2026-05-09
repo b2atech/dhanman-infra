@@ -1,0 +1,20 @@
+[Unit]
+Description={{ item.name }} {{ env }} Service
+After=network.target
+
+[Service]
+WorkingDirectory={{ services_base_dir }}/{{ item.name }}
+ExecStart=/usr/bin/dotnet {{ services_base_dir }}/{{ item.name }}/{{ item.dll }}
+EnvironmentFile={{ services_base_dir }}/{{ item.name }}/.env
+User={{ service_user }}
+Group={{ service_group }}
+Restart=always
+RestartSec=5
+SyslogIdentifier={{ item.name }}-{{ env }}
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths={{ services_base_dir }}/{{ item.name }} {{ services_base_dir }}/logs
+
+[Install]
+WantedBy=multi-user.target

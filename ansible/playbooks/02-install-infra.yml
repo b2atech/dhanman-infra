@@ -1,0 +1,48 @@
+---
+# Install all infrastructure components
+# Requires bootstrap (01) to have run first
+# Usage: ansible-playbook -i inventories/prod playbooks/02-install-infra.yml
+# Run a single role: ... --tags dotnet
+#                   ... --tags postgresql
+#                   ... --tags redis
+#                   ... --tags vault
+#                   ... --tags docker
+#                   ... --tags rabbitmq
+#                   ... --tags minio
+#                   ... --tags monitoring
+#                   ... --tags nginx
+#                   ... --tags backup
+
+- name: Install infrastructure
+  hosts: all
+  become: true
+  roles:
+    - role: dotnet
+      tags: dotnet
+
+    - role: docker
+      tags: docker
+
+    - role: postgresql
+      tags: postgresql
+
+    - role: redis
+      tags: redis
+
+    - role: vault
+      tags: vault
+
+    - role: rabbitmq
+      tags: rabbitmq
+
+    - role: minio
+      tags: minio
+
+    - role: monitoring
+      tags: monitoring
+
+    - role: nginx
+      tags: nginx
+
+    - role: backup
+      tags: backup
