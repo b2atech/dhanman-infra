@@ -110,7 +110,7 @@ Use Phase 1 and Phase 2.
 
 Exit condition:
 
-- `auth-qa.dhanman.com` is live
+- `qa.auth.dhanman.com` is live
 - admin access works
 - realm and clients exist
 - protocol mappers are configured
@@ -178,6 +178,30 @@ For Dhanman, the correct rollout pattern is:
 5. Repeat the proven pattern in PROD.
 
 This is mandatory for this migration. QA is not just a test environment here; it is the place where the migration procedure itself is debugged.
+
+## Current QA status
+
+As of `2026-05-10`, the QA Keycloak base installation is live at `https://qa.auth.dhanman.com`.
+
+What is working:
+
+- DNS and TLS are in place for `qa.auth.dhanman.com`
+- NGINX is proxying to the Keycloak container
+- Keycloak is running against the existing QA PostgreSQL host
+- the master realm OIDC discovery endpoint is responding
+- bootstrap admin creation succeeded on first successful start
+
+What was learned during QA setup:
+
+- first boot must not use `kc.sh start --optimized`
+- the initial server start needs a plain `start`, then later runs can use `start --optimized`
+- the secret-render path used for the first QA attempt did not match the actual Vault secret structure, so bootstrap secret injection must be validated explicitly before service start
+
+Before PROD:
+
+- update the install procedure so first boot uses non-optimized start
+- simplify or harden secret injection so the bootstrap admin password is definitely present before the first container start
+- keep the QA challenge log updated with every install correction
 
 ---
 
