@@ -64,7 +64,7 @@ pipeline {
             steps {
                 script {
                     def inventory = "ansible/inventories/${params.ENVIRONMENT}"
-                    def host = params.ENVIRONMENT == 'prod' ? '57.129.74.139' : '54.37.159.71'
+                    def host = params.ENVIRONMENT == 'prod' ? '51.79.156.217' : '54.37.159.71'
                     def baseDir = params.ENVIRONMENT == 'prod' ? '/var/www/prod' : '/var/www/qa'
 
                     sh """

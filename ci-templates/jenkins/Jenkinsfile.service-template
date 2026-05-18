@@ -11,8 +11,8 @@
 // QA_PORT        = 5201  (or whatever the QA port is)
 //
 // Jenkins credentials required (set once in Manage Credentials):
-//   DO_PROD_HOST     — dm-prd-n IP: 57.129.74.139
-//   DO_FALLBACK_HOST — dm-prd   IP: 51.79.156.217
+//   DO_PROD_HOST     — dm-prd   IP: 51.79.156.217
+//   DO_FALLBACK_HOST — dm-prd-n IP: 57.129.74.139
 //   DO_QA_HOST       — dm-qa    IP: 54.37.159.71
 //   DO_USER          — SSH username (ubuntu)
 //   DO_SSH_KEY       — prod/fallback SSH private key
