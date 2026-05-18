@@ -73,6 +73,11 @@ services:
     domain: prod.agent.dhanman.com
     has_metrics: false
 
+  - name: dhanman-einvoice
+    dll: Dhanman.EInvoice.Api.dll
+    port: 5109
+    domain: prod.einvoice.dhanman.com
+
 ufw_allowed_ports:
   - { port: "22",  proto: tcp, comment: "SSH" }
   - { port: "80",  proto: tcp, comment: "HTTP" }

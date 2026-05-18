@@ -67,6 +67,11 @@ services:
     port: 5208
     domain: qa.agent.dhanman.com
 
+  - name: dhanman-einvoice
+    dll: Dhanman.EInvoice.Api.dll
+    port: 5209
+    domain: qa.einvoice.dhanman.com
+
 ufw_allowed_ports:
   - { port: "22",  proto: tcp, comment: "SSH" }
   - { port: "80",  proto: tcp, comment: "HTTP" }

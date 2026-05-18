@@ -15,14 +15,69 @@ postgresql_use_pgdg: true
 postgresql_pgdg_codename: noble
 postgresql_listen_addresses: "127.0.0.1"
 
-# Replication settings — this host is a streaming replica of dm-prd-n
+# Replication settings — this host is a streaming replica of dm-prd (current prod)
 postgresql_replication_mode: replica
-postgresql_primary_host: 57.129.74.139
+postgresql_primary_host: 51.79.156.217
 postgresql_primary_port: 5432
 postgresql_replication_user: replicator
 
 redis_port: 6379
 redis_bind: "127.0.0.1"
+
+# All service domains share one SAN cert issued under prod.common.dhanman.com
+services_ssl_cert_domain: prod.common.dhanman.com
+
+services:
+  - name: dhanman-common
+    dll: Dhanman.Common.Api.dll
+    port: 5100
+    domain: prod.common.dhanman.com
+
+  - name: dhanman-community
+    dll: Dhanman.Community.Api.dll
+    port: 5101
+    domain: prod.community.dhanman.com
+
+  - name: dhanman-inventory
+    dll: Dhanman.Inventory.Api.dll
+    port: 5102
+    domain: prod.inventory.dhanman.com
+
+  - name: dhanman-payroll
+    dll: Dhanman.Payroll.Api.dll
+    port: 5103
+    domain: prod.payroll.dhanman.com
+
+  - name: dhanman-purchase
+    dll: Dhanman.Purchase.Api.dll
+    port: 5104
+    domain: prod.purchase.dhanman.com
+
+  - name: dhanman-sales
+    dll: Dhanman.Sales.Api.dll
+    port: 5105
+    domain: prod.sales.dhanman.com
+
+  - name: dhanman-payment
+    dll: Dhanman.Payment.Api.dll
+    port: 5106
+    domain: payment.dhanman.com
+
+  - name: dhanman-document
+    dll: Dhanman.Document.dll
+    port: 5107
+    domain: prod.document.dhanman.com
+
+  - name: dhanman-agent
+    dll: Dhanman.Agent.API.dll
+    port: 5108
+    domain: prod.agent.dhanman.com
+    has_metrics: false
+
+  - name: dhanman-einvoice
+    dll: Dhanman.EInvoice.Api.dll
+    port: 5109
+    domain: prod.einvoice.dhanman.com
 
 ufw_allowed_ports:
   - { port: "22",  proto: tcp, comment: "SSH" }
