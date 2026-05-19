@@ -61,6 +61,10 @@ services:
     dll: Dhanman.Payment.Api.dll
     port: 5106
     domain: payment.dhanman.com
+    # EV cert from DigiCert/GeoTrust (B2A Technologies Pvt Ltd) — expires 2026-10-31
+    # Renew manually — certbot does NOT manage this cert
+    ssl_cert: /etc/ssl/payment.dhanman/fullchain.pem
+    ssl_key:  /etc/ssl/payment.dhanman/dhanman.key
 
   - name: dhanman-document
     dll: Dhanman.Document.dll
