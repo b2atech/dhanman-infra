@@ -1,0 +1,57 @@
+---
+# Activate warm prod (dm-prd-n: 57.129.74.139) as primary.
+# Run when dm-prd (51.79.156.217) is down.
+#
+# Activate:  ansible-playbook playbooks/failover.yml -i inventories/fallback/hosts
+# Failback:  ansible-playbook playbooks/failover.yml -i inventories/fallback/hosts --tags failback
+
+- name: Failover — activate warm prod nginx
+  hosts: dhanman_fallback
+  gather_facts: false
+  become: true
+  tags: [always, activate]
+
+  tasks:
+    - name: Enable all service nginx sites
+      file:
+        src: "/etc/nginx/sites-available/{{ item.name }}.conf"
+        dest: "/etc/nginx/sites-enabled/{{ item.name }}.conf"
+        state: link
+      loop: "{{ services }}"
+      notify: reload nginx
+
+    - name: Reload nginx
+      systemd:
+        name: nginx
+        state: reloaded
+
+  handlers:
+    - name: reload nginx
+      systemd:
+        name: nginx
+        state: reloaded
+
+- name: Failback — disable warm prod nginx sites
+  hosts: dhanman_fallback
+  gather_facts: false
+  become: true
+  tags: [never, failback]
+
+  tasks:
+    - name: Disable all service nginx sites
+      file:
+        path: "/etc/nginx/sites-enabled/{{ item.name }}.conf"
+        state: absent
+      loop: "{{ services }}"
+      notify: reload nginx
+
+    - name: Reload nginx
+      systemd:
+        name: nginx
+        state: reloaded
+
+  handlers:
+    - name: reload nginx
+      systemd:
+        name: nginx
+        state: reloaded

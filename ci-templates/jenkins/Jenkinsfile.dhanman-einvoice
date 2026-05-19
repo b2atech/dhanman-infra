@@ -1,25 +1,24 @@
-// SERVICE_SLUG   = dhanman-einvoice
-// SERVICE_PROJECT= src/Dhanman.EInvoice.Api/Dhanman.EInvoice.Api.csproj
-// SERVICE_DLL    = Dhanman.EInvoice.Api.dll
-// PROD_PORT      = 5109
-// QA_PORT        = 5209
+// SERVICE_SLUG    = dhanman-einvoice
+// SERVICE_PROJECT = src/Dhanman.EInvoice.Api/Dhanman.EInvoice.Api.csproj
+// SERVICE_DLL     = Dhanman.EInvoice.Api.dll
+// PROD_PORT       = 5109
+// QA_PORT         = 5209
 
 pipeline {
     agent any
-
     options {
         buildDiscarder(logRotator(daysToKeepStr: '3', numToKeepStr: '10'))
+        disableConcurrentBuilds()
     }
-
     parameters {
         string(name: 'BRANCH_TO_DEPLOY', defaultValue: '', description: 'Branch to deploy (leave blank for default)')
-        booleanParam(name: 'DEPLOY_TEST',     defaultValue: false, description: 'Trigger Test Deployment?')
-        booleanParam(name: 'DEPLOY_PROD',     defaultValue: false, description: 'Trigger Production Deployment?')
+        string(name: 'ROLLBACK_VERSION', defaultValue: '', description: 'Rollback to this release (e.g. 1.0.0-b42-a3f9c1d). Set DEPLOY_PROD=true. Skips build.')
+        booleanParam(name: 'DEPLOY_TEST', defaultValue: false, description: 'Trigger Test Deployment?')
+        booleanParam(name: 'DEPLOY_PROD', defaultValue: false, description: 'Trigger Production Deployment?')
     }
-
     environment {
-        DO_PROD_HOST     = credentials('DO_PROD_HOST')
         DO_FALLBACK_HOST = credentials('DO_FALLBACK_HOST')
+        DO_PROD_HOST     = credentials('DO_PROD_HOST')
         DO_QA_HOST       = credentials('DO_QA_HOST')
         DO_USER          = credentials('DO_USER')
         DO_SSH_KEY_ID    = 'DO_SSH_KEY'
@@ -41,14 +40,60 @@ pipeline {
                                 credentialsId: 'github-credentials'
                             ]]
                         ])
+                        echo "Checked out branch: ${params.BRANCH_TO_DEPLOY}"
                     } else {
                         checkout scm
+                        echo "Checked out default branch"
+                    }
+                }
+            }
+        }
+
+        stage('Rollback Production') {
+            when {
+                allOf {
+                    expression { return params.ROLLBACK_VERSION?.trim() }
+                    expression { return params.DEPLOY_PROD }
+                }
+            }
+            steps {
+                script {
+                    def version = params.ROLLBACK_VERSION.trim()
+                    sshagent(credentials: [env.DO_SSH_KEY_ID]) {
+                        sh """
+                            ssh -o StrictHostKeyChecking=no ${DO_USER}@${DO_PROD_HOST} 'bash -s' <<'ENDSSH'
+set -e
+VERSION="${version}"
+SERVICE="dhanman-einvoice"
+RELEASES_DIR="/var/www/prod/\${SERVICE}-releases"
+RELEASE_PATH="\${RELEASES_DIR}/\${VERSION}"
+LIVE_PATH="/var/www/prod/\${SERVICE}"
+echo "=== Rollback: \${SERVICE}-prod to \${VERSION} ==="
+[ -L "\${LIVE_PATH}" ] && echo "Current live: \$(readlink \${LIVE_PATH})"
+if [ ! -d "\${RELEASE_PATH}" ]; then
+    echo "ERROR: Release '\${VERSION}' not found."; echo "Available:"; ls -1dt "\${RELEASES_DIR}/"*/ 2>/dev/null | sed 's|.*/||;s|/\$||' || echo "(none)"; exit 1
+fi
+[ ! -f "\${RELEASE_PATH}/Dhanman.EInvoice.Api.dll" ] && { echo "ERROR: DLL missing. Aborting."; exit 1; }
+sudo ln -sfn "\${RELEASE_PATH}" "\${LIVE_PATH}.new"
+sudo mv -Tf "\${LIVE_PATH}.new" "\${LIVE_PATH}"
+echo "Active release: \$(readlink \${LIVE_PATH})"
+sudo systemctl daemon-reload; sudo systemctl restart "\${SERVICE}-prod"
+sleep 5; HEALTHY=0
+for i in 1 2 3; do
+    curl -sf "http://127.0.0.1:5109/health" > /dev/null 2>&1 && { HEALTHY=1; echo "✓ Health check passed"; break; }
+    echo "Health check \${i}/3 failed. Retrying..."; sleep 5
+done
+[ "\${HEALTHY}" -eq 1 ] || { echo "ERROR: Health check failed after rollback."; exit 1; }
+echo "✓ Rollback complete: \${SERVICE}-prod at \${VERSION}"
+ENDSSH
+                        """
                     }
                 }
             }
         }
 
         stage('Set up .NET') {
+            when { not { expression { return params.ROLLBACK_VERSION?.trim() } } }
             steps {
                 sh '''
                     wget -q https://dot.net/v1/dotnet-install.sh
@@ -58,114 +103,170 @@ pipeline {
             }
         }
 
-        // -------------------------------------------------------
-        // QA
-        // -------------------------------------------------------
-        stage('Deploy to QA') {
-            when { anyOf { branch 'main'; branch 'develop' } }
-            environment {
-                DOTNET_ENVIRONMENT = 'qa'
-                VAULT_ADDRESS  = credentials('VAULT_ADDRESS_QA')
-                VAULT_ROLEID   = credentials('VAULT_ROLEID_QA')
-                VAULT_SECRETID = credentials('VAULT_SECRETID_QA')
-            }
+        stage('Compute Release Version') {
+            when { not { expression { return params.ROLLBACK_VERSION?.trim() } } }
             steps {
-                sh '''
-                    dotnet publish src/Dhanman.EInvoice.Api/Dhanman.EInvoice.Api.csproj -c Release -r linux-x64 --self-contained false -o publish
-                    tar -czf publish.tar.gz -C publish .
-                '''
-                sshagent(credentials: [env.DO_QA_SSH_KEY_ID]) {
-                    sh """
-                        scp -o StrictHostKeyChecking=no publish.tar.gz ${DO_USER}@${DO_QA_HOST}:/tmp/
-                        ssh -o StrictHostKeyChecking=no ${DO_USER}@${DO_QA_HOST} 'bash -s' <<'ENDSSH'
-set -e
-sudo mkdir -p /var/www/qa/dhanman-einvoice
-sudo tar -xzf /tmp/publish.tar.gz -C /var/www/qa/dhanman-einvoice
-sudo rm /tmp/publish.tar.gz
-sudo tee /var/www/qa/dhanman-einvoice/.env > /dev/null <<EOT
-DOTNET_ENVIRONMENT=qa
-ASPNETCORE_ENVIRONMENT=qa
-ASPNETCORE_URLS=http://127.0.0.1:5209
-Vault__Address=${VAULT_ADDRESS}
-Vault__RoleId=${VAULT_ROLEID}
-Vault__SecretId=${VAULT_SECRETID}
-EOT
-sudo chmod 644 /var/www/qa/dhanman-einvoice/.env
-sudo systemctl daemon-reload
-sudo systemctl restart dhanman-einvoice-qa
-ENDSSH
-                    """
+                script {
+                    def projVersion = sh(
+                        script: "grep -oP '(?<=<Version>)[^<]+' src/Dhanman.EInvoice.Api/Dhanman.EInvoice.Api.csproj 2>/dev/null | head -1 || echo ''",
+                        returnStdout: true
+                    ).trim()
+                    def gitShort = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                    env.RELEASE_VERSION = projVersion ? "${projVersion}-b${env.BUILD_NUMBER}-${gitShort}" : "b${env.BUILD_NUMBER}-${gitShort}"
+                    echo "Release version: ${env.RELEASE_VERSION}"
                 }
             }
         }
 
-        // -------------------------------------------------------
-        // PRODUCTION — deploys to dm-prd (primary) then dm-prd-n (fallback)
-        // -------------------------------------------------------
-        stage('Deploy to Production') {
-            when { expression { return params.DEPLOY_PROD == true } }
-            environment {
-                DOTNET_ENVIRONMENT = 'Production'
-                VAULT_ADDRESS  = credentials('VAULT_ADDRESS_PROD')
-                VAULT_ROLEID   = credentials('VAULT_ROLEID_PROD')
-                VAULT_SECRETID = credentials('VAULT_SECRETID_PROD')
-            }
-            steps {
-                sh '''
-                    dotnet publish src/Dhanman.EInvoice.Api/Dhanman.EInvoice.Api.csproj -c Release -r linux-x64 --self-contained false -o publish
-                    tar -czf publish.tar.gz -C publish .
-                '''
-
-                // --- Primary prod (dm-prd — 51.79.156.217) ---
-                sshagent(credentials: [env.DO_SSH_KEY_ID]) {
-                    sh """
-                        scp -o StrictHostKeyChecking=no publish.tar.gz ${DO_USER}@${DO_PROD_HOST}:/tmp/
-                        ssh -o StrictHostKeyChecking=no ${DO_USER}@${DO_PROD_HOST} 'bash -s' <<'ENDSSH'
-set -e
-echo "Deploying dhanman-einvoice to primary prod (dm-prd)..."
-sudo mkdir -p /var/www/prod/dhanman-einvoice
-sudo tar -xzf /tmp/publish.tar.gz -C /var/www/prod/dhanman-einvoice
-sudo rm /tmp/publish.tar.gz
-sudo tee /var/www/prod/dhanman-einvoice/.env > /dev/null <<EOT
-DOTNET_ENVIRONMENT=Production
-ASPNETCORE_ENVIRONMENT=Production
-ASPNETCORE_URLS=http://127.0.0.1:5109
-Vault__Address=${VAULT_ADDRESS}
-Vault__RoleId=${VAULT_ROLEID}
-Vault__SecretId=${VAULT_SECRETID}
-EOT
-sudo chmod 644 /var/www/prod/dhanman-einvoice/.env
-sudo systemctl daemon-reload
-sudo systemctl restart dhanman-einvoice-prod
-sudo systemctl status dhanman-einvoice-prod --no-pager
-ENDSSH
-                    """
+        stage('Deploy to QA') {
+            when {
+                allOf {
+                    anyOf { branch 'main'; branch 'develop' }
+                    not { expression { return params.ROLLBACK_VERSION?.trim() } }
                 }
-
-                // --- Fallback prod (dm-prd-n — 57.129.74.139) — non-blocking ---
-                catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-                    sshagent(credentials: [env.DO_SSH_KEY_ID]) {
+            }
+            environment { DOTNET_ENVIRONMENT = 'qa' }
+            steps {
+                withCredentials([
+                    string(credentialsId: 'CONNECTIONSTRINGS__EINVOICEDB_QA', variable: 'EINVOICEDB'),
+                    string(credentialsId: 'EINVOICE_ADMINKEY_QA', variable: 'ADMIN_KEY')
+                ]) {
+                    script {
+                        def version = env.RELEASE_VERSION
                         sh """
-                            scp -o StrictHostKeyChecking=no publish.tar.gz ${DO_USER}@${DO_FALLBACK_HOST}:/tmp/
-                            ssh -o StrictHostKeyChecking=no ${DO_USER}@${DO_FALLBACK_HOST} 'bash -s' <<'ENDSSH'
-set -e
-echo "Deploying dhanman-einvoice to fallback prod (dm-prd-n)..."
-sudo mkdir -p /var/www/prod/dhanman-einvoice
-sudo tar -xzf /tmp/publish.tar.gz -C /var/www/prod/dhanman-einvoice
-sudo rm /tmp/publish.tar.gz
-sudo tee /var/www/prod/dhanman-einvoice/.env > /dev/null <<EOT
-DOTNET_ENVIRONMENT=Production
-ASPNETCORE_ENVIRONMENT=Production
-ASPNETCORE_URLS=http://127.0.0.1:5109
-Vault__Address=${VAULT_ADDRESS}
-Vault__RoleId=${VAULT_ROLEID}
-Vault__SecretId=${VAULT_SECRETID}
-EOT
-sudo chmod 644 /var/www/prod/dhanman-einvoice/.env
-sudo systemctl daemon-reload
-sudo systemctl restart dhanman-einvoice-prod || true
-ENDSSH
+                            dotnet publish src/Dhanman.EInvoice.Api/Dhanman.EInvoice.Api.csproj -c Release -r linux-x64 --self-contained false -o publish
+                            tar -czf publish.tar.gz -C publish .
                         """
+                        sshagent(credentials: [env.DO_QA_SSH_KEY_ID]) {
+                            sh """
+                                scp -o StrictHostKeyChecking=no publish.tar.gz ${DO_USER}@${DO_QA_HOST}:/tmp/dhanman-einvoice-${version}.tar.gz
+                                ssh -o StrictHostKeyChecking=no ${DO_USER}@${DO_QA_HOST} 'bash -s' <<'ENDSSH'
+set -e
+VERSION="${version}"; SERVICE="dhanman-einvoice"
+RELEASES_DIR="/var/www/qa/\${SERVICE}-releases"; RELEASE_PATH="\${RELEASES_DIR}/\${VERSION}"; LIVE_PATH="/var/www/qa/\${SERVICE}"
+echo "=== Deploy: \${SERVICE}-qa v\${VERSION} ==="
+[ -L "\${LIVE_PATH}" ] && echo "Current live: \$(readlink \${LIVE_PATH})" || echo "Current live: (none)"
+sudo mkdir -p "\${RELEASE_PATH}"
+sudo tar -xzf /tmp/\${SERVICE}-\${VERSION}.tar.gz -C "\${RELEASE_PATH}"; sudo rm -f /tmp/\${SERVICE}-\${VERSION}.tar.gz
+[ ! -f "\${RELEASE_PATH}/Dhanman.EInvoice.Api.dll" ] && { echo "ERROR: DLL not found."; sudo rm -rf "\${RELEASE_PATH}"; exit 1; }
+echo "✓ DLL validated"
+sudo tee "\${RELEASE_PATH}/.env" > /dev/null <<EOT
+DOTNET_ENVIRONMENT=qa
+ASPNETCORE_ENVIRONMENT=qa
+ASPNETCORE_URLS=http://127.0.0.1:5209
+ConnectionStrings__DefaultConnection=${EINVOICEDB}
+AdminKey=${ADMIN_KEY}
+EOT
+sudo chmod 640 "\${RELEASE_PATH}/.env"; sudo chown -R www-data:www-data "\${RELEASE_PATH}"
+[ -d "\${LIVE_PATH}" ] && [ ! -L "\${LIVE_PATH}" ] && sudo mv "\${LIVE_PATH}" "\${LIVE_PATH}.legacy"
+sudo ln -sfn "\${RELEASE_PATH}" "\${LIVE_PATH}.new"; sudo mv -Tf "\${LIVE_PATH}.new" "\${LIVE_PATH}"
+echo "Active release: \$(readlink \${LIVE_PATH})"
+sudo systemctl daemon-reload; sudo systemctl restart "\${SERVICE}-qa"
+sleep 5; HEALTHY=0
+for i in 1 2 3 4 5; do
+    curl -sf "http://127.0.0.1:5209/health" > /dev/null 2>&1 && { HEALTHY=1; echo "✓ Health check passed"; break; }
+    echo "Health check \${i}/5 failed. Retrying..."; sleep 5
+done
+[ "\${HEALTHY}" -eq 1 ] || { echo "ERROR: Health check failed."; exit 1; }
+ACTIVE_REAL=\$(readlink -f "\${LIVE_PATH}")
+ls -dt \${RELEASES_DIR}/*/ 2>/dev/null | tail -n +6 | while read -r dir; do
+    dir_clean="\${dir%/}"; [ "\${dir_clean}" != "\${ACTIVE_REAL}" ] && sudo rm -rf "\${dir_clean}"
+done
+echo "✓ QA deploy complete: \${SERVICE}-qa v\${VERSION}"
+ENDSSH
+                            """
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to Production') {
+            when {
+                allOf {
+                    expression { return params.DEPLOY_PROD }
+                    not { expression { return params.ROLLBACK_VERSION?.trim() } }
+                }
+            }
+            environment { DOTNET_ENVIRONMENT = 'Production' }
+            steps {
+                withCredentials([
+                    string(credentialsId: 'CONNECTIONSTRINGS__EINVOICEDB_PROD', variable: 'EINVOICEDB'),
+                    string(credentialsId: 'EINVOICE_ADMINKEY_PROD', variable: 'ADMIN_KEY')
+                ]) {
+                    script {
+                        def version = env.RELEASE_VERSION
+                        sh """
+                            dotnet publish src/Dhanman.EInvoice.Api/Dhanman.EInvoice.Api.csproj -c Release -r linux-x64 --self-contained false -o publish
+                            tar -czf publish.tar.gz -C publish .
+                        """
+                        sshagent(credentials: [env.DO_SSH_KEY_ID]) {
+                            sh """
+                                scp -o StrictHostKeyChecking=no publish.tar.gz ${DO_USER}@${DO_PROD_HOST}:/tmp/dhanman-einvoice-${version}.tar.gz
+                                ssh -o StrictHostKeyChecking=no ${DO_USER}@${DO_PROD_HOST} 'bash -s' <<'ENDSSH'
+set -e
+VERSION="${version}"; SERVICE="dhanman-einvoice"
+RELEASES_DIR="/var/www/prod/\${SERVICE}-releases"; RELEASE_PATH="\${RELEASES_DIR}/\${VERSION}"; LIVE_PATH="/var/www/prod/\${SERVICE}"
+echo "=== Deploy: \${SERVICE}-prod v\${VERSION} ==="
+[ -L "\${LIVE_PATH}" ] && echo "Current live: \$(readlink \${LIVE_PATH})" || echo "Current live: (none)"
+sudo mkdir -p "\${RELEASE_PATH}"
+sudo tar -xzf /tmp/\${SERVICE}-\${VERSION}.tar.gz -C "\${RELEASE_PATH}"; sudo rm -f /tmp/\${SERVICE}-\${VERSION}.tar.gz
+[ ! -f "\${RELEASE_PATH}/Dhanman.EInvoice.Api.dll" ] && { echo "ERROR: DLL not found."; sudo rm -rf "\${RELEASE_PATH}"; exit 1; }
+echo "✓ DLL validated"
+sudo tee "\${RELEASE_PATH}/.env" > /dev/null <<EOT
+DOTNET_ENVIRONMENT=Production
+ASPNETCORE_URLS=http://127.0.0.1:5109
+ConnectionStrings__DefaultConnection=${EINVOICEDB}
+AdminKey=${ADMIN_KEY}
+EOT
+sudo chmod 640 "\${RELEASE_PATH}/.env"; sudo chown -R www-data:www-data "\${RELEASE_PATH}"
+[ -d "\${LIVE_PATH}" ] && [ ! -L "\${LIVE_PATH}" ] && sudo mv "\${LIVE_PATH}" "\${LIVE_PATH}.legacy"
+sudo ln -sfn "\${RELEASE_PATH}" "\${LIVE_PATH}.new"; sudo mv -Tf "\${LIVE_PATH}.new" "\${LIVE_PATH}"
+echo "Active release: \$(readlink \${LIVE_PATH})"
+sudo systemctl daemon-reload; sudo systemctl restart "\${SERVICE}-prod"
+sleep 5; HEALTHY=0
+for i in 1 2 3 4 5; do
+    curl -sf "http://127.0.0.1:5109/health" > /dev/null 2>&1 && { HEALTHY=1; echo "✓ Health check passed"; break; }
+    echo "Health check \${i}/5 failed. Retrying..."; sleep 5
+done
+[ "\${HEALTHY}" -eq 1 ] || { echo "ERROR: Health check failed. Rollback with ROLLBACK_VERSION=<prev>"; exit 1; }
+ACTIVE_REAL=\$(readlink -f "\${LIVE_PATH}")
+ls -dt \${RELEASES_DIR}/*/ 2>/dev/null | tail -n +6 | while read -r dir; do
+    dir_clean="\${dir%/}"; [ "\${dir_clean}" != "\${ACTIVE_REAL}" ] && sudo rm -rf "\${dir_clean}"
+done
+echo "✓ Production deploy complete: \${SERVICE}-prod v\${VERSION} (primary)"
+ENDSSH
+                            """
+                        }
+                        catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                            sshagent(credentials: [env.DO_SSH_KEY_ID]) {
+                                sh """
+                                    scp -o StrictHostKeyChecking=no publish.tar.gz ${DO_USER}@${DO_FALLBACK_HOST}:/tmp/dhanman-einvoice-${version}.tar.gz
+                                    ssh -o StrictHostKeyChecking=no ${DO_USER}@${DO_FALLBACK_HOST} 'bash -s' <<'ENDSSH'
+set -e
+VERSION="${version}"; SERVICE="dhanman-einvoice"
+RELEASES_DIR="/var/www/prod/\${SERVICE}-releases"; RELEASE_PATH="\${RELEASES_DIR}/\${VERSION}"; LIVE_PATH="/var/www/prod/\${SERVICE}"
+sudo mkdir -p "\${RELEASE_PATH}"; sudo tar -xzf /tmp/\${SERVICE}-\${VERSION}.tar.gz -C "\${RELEASE_PATH}"; sudo rm -f /tmp/\${SERVICE}-\${VERSION}.tar.gz
+[ ! -f "\${RELEASE_PATH}/Dhanman.EInvoice.Api.dll" ] && { sudo rm -rf "\${RELEASE_PATH}"; exit 1; }
+sudo tee "\${RELEASE_PATH}/.env" > /dev/null <<EOT
+DOTNET_ENVIRONMENT=Production
+ASPNETCORE_URLS=http://127.0.0.1:5109
+ConnectionStrings__DefaultConnection=${EINVOICEDB}
+AdminKey=${ADMIN_KEY}
+EOT
+sudo chmod 640 "\${RELEASE_PATH}/.env"; sudo chown -R www-data:www-data "\${RELEASE_PATH}"
+[ -d "\${LIVE_PATH}" ] && [ ! -L "\${LIVE_PATH}" ] && sudo mv "\${LIVE_PATH}" "\${LIVE_PATH}.legacy"
+sudo ln -sfn "\${RELEASE_PATH}" "\${LIVE_PATH}.new"; sudo mv -Tf "\${LIVE_PATH}.new" "\${LIVE_PATH}"
+sudo systemctl daemon-reload; sudo systemctl restart "\${SERVICE}-prod" || true
+ACTIVE_REAL=\$(readlink -f "\${LIVE_PATH}")
+ls -dt \${RELEASES_DIR}/*/ 2>/dev/null | tail -n +6 | while read -r dir; do
+    dir_clean="\${dir%/}"; [ "\${dir_clean}" != "\${ACTIVE_REAL}" ] && sudo rm -rf "\${dir_clean}"
+done
+echo "✓ Production deploy complete: \${SERVICE}-prod v\${VERSION} (fallback)"
+ENDSSH
+                                """
+                            }
+                        }
                     }
                 }
             }
@@ -174,7 +275,7 @@ ENDSSH
 
     post {
         always { cleanWs() }
-        failure { echo 'Deployment failed!' }
-        success { echo 'Deployment succeeded!' }
+        failure { echo '🚨 Deployment failed!' }
+        success { echo '✅ Deployment succeeded!' }
     }
 }
