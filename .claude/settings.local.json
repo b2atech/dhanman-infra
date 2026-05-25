@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -i ~/.ssh/id_rsa ubuntu@57.129.74.139 \"curl -sv 'http://localhost:9081/api/json?tree=jobs[name,color]' 2>&1 | tail -30\")",
+      "Bash(ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -i ~/.ssh/id_rsa ubuntu@57.129.74.139 \"curl -u admin:admin -s 'http://localhost:9081/api/json?tree=jobs[name,color]' && echo && curl -s -o /dev/null -w '%{http_code}' http://localhost:9081/api/json\")",
+      "PowerShell(ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -i \"C:\\\\Users\\\\SAI\\\\.ssh\\\\id_rsa\" ubuntu@57.129.74.139 \"curl -s -o /dev/null -w '%{http_code}' http://localhost:9081/ && echo && curl -s 'http://localhost:9081/api/json?tree=jobs[name,color]'\")",
+      "PowerShell(ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -i \"C:\\\\Users\\\\SAI\\\\.ssh\\\\id_ed25519\" ubuntu@57.129.74.139 \"curl -s 'http://localhost:9081/api/json?tree=jobs[name,color]'\")",
+      "PowerShell(ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -i \"C:\\\\Users\\\\SAI\\\\.ssh\\\\id_ed25519\" ubuntu@57.129.74.139 \"echo connected && ls /var/lib/jenkins/jobs/ 2>/dev/null || ls ~/.jenkins/jobs/ 2>/dev/null\")",
+      "PowerShell(ssh -o StrictHostKeyChecking=no -i \"C:\\\\Users\\\\SAI\\\\.ssh\\\\id_ed25519\" ubuntu@57.129.74.139 \"pip3 show ansible 2>/dev/null | head -2; python3 -m ansible --version 2>/dev/null | head -1; ls ~/.local/bin/ansible-playbook 2>/dev/null; ls /usr/local/bin/ansible-playbook 2>/dev/null\")",
+      "PowerShell(ssh -o StrictHostKeyChecking=no -i \"C:\\\\Users\\\\SAI\\\\.ssh\\\\id_ed25519\" ubuntu@57.129.74.139 \"find / -name ansible-playbook 2>/dev/null | head -5\")",
+      "PowerShell(wsl --list --online 2>&1)",
+      "PowerShell(wsl -d Ubuntu -- bash -c \"cd /mnt/d/B2A/latest/dhanman-infra && ansible-playbook -i ansible/inventories/qa ansible/playbooks/03-deploy-services.yml\" 2>&1)",
+      "PowerShell(wsl -d Ubuntu -- bash -c \"sudo apt-get update -qq && sudo apt-get install -y ansible\" 2>&1)",
+      "PowerShell(wsl --shutdown; Start-Sleep -Seconds 3; wsl -d Ubuntu -- bash -c \"ansible-playbook --version\" 2>&1)",
+      "PowerShell(wsl -d Ubuntu -- bash -c \"cd /mnt/d/B2A/latest/dhanman-infra/ansible && ansible-playbook -i inventories/qa playbooks/03-deploy-services.yml\" 2>&1)",
+      "PowerShell(wsl -d Ubuntu -- bash -lc \"cd /mnt/d/B2A/latest/dhanman-infra/ansible && ANSIBLE_CONFIG=/mnt/d/B2A/latest/dhanman-infra/ansible/ansible.cfg ANSIBLE_ROLES_PATH=/mnt/d/B2A/latest/dhanman-infra/ansible/roles ansible-playbook -i inventories/qa playbooks/03-deploy-services.yml -e service_name=dhanman-einvoice\" 2>&1)",
+      "PowerShell(wsl -d Ubuntu -- bash -lc \"mkdir -p ~/.ssh && cp /mnt/c/Users/SAI/.ssh/id_rsa ~/.ssh/id_rsa && chmod 600 ~/.ssh/id_rsa && echo 'Key copied OK'\" 2>&1)",
+      "PowerShell(Get-ChildItem *)",
+      "PowerShell(wsl -d Ubuntu -- bash -lc \"mkdir -p ~/.ssh && cp /mnt/c/Users/SAI/.ssh/id_ed25519 ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519 && echo 'Key copied OK'\" 2>&1)",
+      "PowerShell(wsl -d Ubuntu -- bash -lc \"cd /mnt/d/B2A/latest/dhanman-infra/ansible && ANSIBLE_CONFIG=/mnt/d/B2A/latest/dhanman-infra/ansible/ansible.cfg ANSIBLE_ROLES_PATH=/mnt/d/B2A/latest/dhanman-infra/ansible/roles ansible-playbook -i inventories/qa playbooks/02-install-infra.yml --tags nginx\" 2>&1)",
+      "PowerShell(wsl -d Ubuntu -- bash -lc \"cd /mnt/d/B2A/latest/dhanman-infra/ansible && ANSIBLE_CONFIG=/mnt/d/B2A/latest/dhanman-infra/ansible/ansible.cfg ANSIBLE_ROLES_PATH=/mnt/d/B2A/latest/dhanman-infra/ansible/roles ansible-playbook -i inventories/qa playbooks/nginx-only.yml\" 2>&1)",
+      "PowerShell(wsl -d Ubuntu -- bash -lc \"ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no ubuntu@54.37.159.71 'for svc in dhanman-common dhanman-community dhanman-inventory dhanman-payroll dhanman-purchase dhanman-sales; do sudo rm /etc/nginx/sites-enabled/\\\\$svc.conf && sudo ln -s /etc/nginx/sites-available/\\\\$svc.conf /etc/nginx/sites-enabled/\\\\$svc.conf; done && sudo nginx -t && sudo systemctl reload nginx'\" 2>&1)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(ssh *)"
+    ]
+  }
+}
