@@ -22,7 +22,11 @@
       "PowerShell(wsl -d Ubuntu -- bash -lc \"ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no ubuntu@54.37.159.71 'for svc in dhanman-common dhanman-community dhanman-inventory dhanman-payroll dhanman-purchase dhanman-sales; do sudo rm /etc/nginx/sites-enabled/\\\\$svc.conf && sudo ln -s /etc/nginx/sites-available/\\\\$svc.conf /etc/nginx/sites-enabled/\\\\$svc.conf; done && sudo nginx -t && sudo systemctl reload nginx'\" 2>&1)",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "Bash(ssh *)"
+      "Bash(ssh *)",
+      "PowerShell(git clone *)",
+      "PowerShell(dotnet new xunit *)",
+      "PowerShell(dotnet build *)",
+      "PowerShell(dotnet test *)"
     ]
   }
 }
