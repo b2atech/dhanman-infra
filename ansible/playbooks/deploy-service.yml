@@ -11,6 +11,7 @@
   become: true
   vars:
     target_service: "{{ service_name | mandatory('Pass -e service_name=<name>') }}"
+    target_unit: "{{ target_service }}-{{ env }}"
   tasks:
     - name: Reload systemd daemon
       systemd:
@@ -18,7 +19,7 @@
 
     - name: Restart target service
       systemd:
-        name: "{{ target_service }}"
+        name: "{{ target_unit }}"
         state: restarted
 
     - name: Wait for service to become healthy
@@ -30,10 +31,10 @@
 
     - name: Confirm service is running
       systemd:
-        name: "{{ target_service }}"
+        name: "{{ target_unit }}"
       register: svc_status
 
     - name: Fail if service did not start
       fail:
-        msg: "{{ target_service }} failed to start. Check: journalctl -u {{ target_service }} -n 50"
+        msg: "{{ target_unit }} failed to start. Check: journalctl -u {{ target_unit }} -n 50"
       when: svc_status.status.ActiveState != "active"
