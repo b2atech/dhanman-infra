@@ -70,9 +70,14 @@ pipeline {
         stage('Set up .NET') {
             steps {
                 sh '''
-                    wget -q https://dot.net/v1/dotnet-install.sh
-                    chmod +x dotnet-install.sh
-                    ./dotnet-install.sh --channel 9.0
+                    if command -v dotnet >/dev/null 2>&1 && dotnet --version | grep -q "^9\\."; then
+                        echo "✅ .NET $(dotnet --version) already installed — skipping download"
+                    else
+                        echo "⬇️ .NET 9 not found — downloading installer..."
+                        wget -q https://dot.net/v1/dotnet-install.sh
+                        chmod +x dotnet-install.sh
+                        ./dotnet-install.sh --channel 9.0
+                    fi
                 '''
             }
         }
