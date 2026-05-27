@@ -76,7 +76,7 @@ pipeline {
             }
             steps {
                 sh '''
-                    dotnet publish src/Dhanman.EInvoice.Api/Dhanman.EInvoice.Api.csproj -c Release -r linux-x64 --self-contained false -o publish
+                    dotnet publish src/Dhanman.EInvoice.Api/Dhanman.EInvoice.Api.csproj -c Release -r linux-x64 --self-contained false -o publish /m:1
                     tar -czf publish.tar.gz -C publish .
                 '''
                 sshagent(credentials: [env.DO_QA_SSH_KEY_ID]) {
@@ -117,7 +117,7 @@ ENDSSH
             }
             steps {
                 sh '''
-                    dotnet publish src/Dhanman.EInvoice.Api/Dhanman.EInvoice.Api.csproj -c Release -r linux-x64 --self-contained false -o publish
+                    dotnet publish src/Dhanman.EInvoice.Api/Dhanman.EInvoice.Api.csproj -c Release -r linux-x64 --self-contained false -o publish /m:1
                     tar -czf publish.tar.gz -C publish .
                 '''
 
