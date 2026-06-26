@@ -4,7 +4,7 @@ services_base_dir: /var/www/qa
 service_user: www-data
 service_group: www-data
 
-vault_address: https://vault.qa.dhanman.com
+vault_address: https://vault.qa.dgtula.com
 vault_port: 8200
 vault_storage_path: /opt/vault/data
 vault_apt_codename: noble

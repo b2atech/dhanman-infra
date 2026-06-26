@@ -4,7 +4,7 @@ services_base_dir: /var/www/prod
 service_user: www-data
 service_group: www-data
 
-vault_address: https://vault.dhanman.com
+vault_address: https://vault.dgtula.com
 vault_port: 8200
 vault_storage_path: /opt/vault/data
 # HashiCorp apt doesn't support plucky yet — use noble (binary-compatible)
