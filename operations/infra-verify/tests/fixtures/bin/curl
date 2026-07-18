@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Mock curl for bats tests (used by SVC-03, HLT-01, LK, and PM checks).
+# Mock curl for bats tests (used by SVC-03, HLT-01, LK, PM, and GF checks).
 # Ignores all real network arguments and emulates real curl's actual
 # body/--write-out/--output interaction:
 #   - no --output given            -> body prints to stdout
@@ -34,6 +34,14 @@
 #                          within the same test
 #   MOCK_PROM_RULES_BODY  (PM-06 only) response when the query parameter
 #                          contains "rule_group_last_evaluation"
+#   MOCK_GRAFANA_HEALTH_BODY / _HTTP_CODE       (GF-01, URL contains
+#                          "/api/health")
+#   MOCK_GRAFANA_DATASOURCES_BODY / _HTTP_CODE  (GF-03, URL contains
+#                          "/api/datasources")
+#   MOCK_GRAFANA_QUERY_PROM_BODY / _HTTP_CODE   (GF-04, URL contains
+#                          "/api/ds/query" and --data contains "prometheus")
+#   MOCK_GRAFANA_QUERY_LOKI_BODY / _HTTP_CODE   (GF-05, URL contains
+#                          "/api/ds/query" and --data contains "loki")
 #   MOCK_CURL_FAIL        (if set to any non-empty value: simulates a total
 #                          connection failure — http_code forced to "000",
 #                          time_total to "0.000", body ignored, exit 7)
@@ -53,6 +61,7 @@ write_out_fmt=""
 output_file=""
 url_arg=""
 query_arg=""
+data_arg=""
 
 args=("$@")
 i=0
@@ -66,6 +75,10 @@ while [[ $i -lt ${#args[@]} ]]; do
       i=$((i + 1))
       output_file="${args[$i]:-}"
       ;;
+    --data)
+      i=$((i + 1))
+      data_arg="${args[$i]:-}"
+      ;;
     query=*)
       query_arg="${args[$i]}"
       ;;
@@ -76,7 +89,21 @@ while [[ $i -lt ${#args[@]} ]]; do
   i=$((i + 1))
 done
 
-if [[ "$url_arg" == *"/ready"* ]]; then
+if [[ "$url_arg" == *"/api/health"* ]]; then
+  body="${MOCK_GRAFANA_HEALTH_BODY-${body}}"
+  [[ -n "${MOCK_GRAFANA_HEALTH_HTTP_CODE:-}" ]] && http_code="$MOCK_GRAFANA_HEALTH_HTTP_CODE"
+elif [[ "$url_arg" == *"/api/datasources"* ]]; then
+  body="${MOCK_GRAFANA_DATASOURCES_BODY-${body}}"
+  [[ -n "${MOCK_GRAFANA_DATASOURCES_HTTP_CODE:-}" ]] && http_code="$MOCK_GRAFANA_DATASOURCES_HTTP_CODE"
+elif [[ "$url_arg" == *"/api/ds/query"* ]]; then
+  if [[ "$data_arg" == *'"loki"'* ]]; then
+    body="${MOCK_GRAFANA_QUERY_LOKI_BODY-${body}}"
+    [[ -n "${MOCK_GRAFANA_QUERY_LOKI_HTTP_CODE:-}" ]] && http_code="$MOCK_GRAFANA_QUERY_LOKI_HTTP_CODE"
+  else
+    body="${MOCK_GRAFANA_QUERY_PROM_BODY-${body}}"
+    [[ -n "${MOCK_GRAFANA_QUERY_PROM_HTTP_CODE:-}" ]] && http_code="$MOCK_GRAFANA_QUERY_PROM_HTTP_CODE"
+  fi
+elif [[ "$url_arg" == *"/ready"* ]]; then
   body="${MOCK_PROM_READY_BODY-${MOCK_LOKI_READY_BODY-ready}}"
 elif [[ "$query_arg" == *"last_reload_successful"* && -n "${MOCK_PROM_RELOAD_BODY+x}" ]]; then
   body="$MOCK_PROM_RELOAD_BODY"
