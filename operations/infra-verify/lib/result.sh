@@ -31,6 +31,14 @@ RESULT_ENV=""
 
 readonly _RESULT_VALID_STATUSES=(HEALTHY WARNING CRITICAL UNKNOWN NOT_CONFIGURED NOT_APPLICABLE)
 
+# Shared with lib/report.sh's tripwire scanner (report_scan_for_secrets) —
+# kept as one source of truth so the two never drift out of sync.
+readonly _RESULT_CREDENTIAL_PATTERNS=(
+  '([Pp]assword|[Pp]wd|[Ss]ecret|[Tt]oken)[[:space:]]*=[^[:space:]]+'
+  '[Bb]earer[[:space:]]+[A-Za-z0-9._~+/=-]+'
+  '[a-zA-Z][a-zA-Z0-9+.-]*://[^/@[:space:]]+:[^/@[:space:]]+@'
+)
+
 # ---------------------------------------------------------------------------
 # Internal logging (self-contained — does not assume a caller-provided log())
 # ---------------------------------------------------------------------------
@@ -214,11 +222,6 @@ result_add_with_journal() {
 # ---------------------------------------------------------------------------
 redact() {
   local input="$1"
-  local -a patterns=(
-    '([Pp]assword|[Pp]wd|[Ss]ecret|[Tt]oken)[[:space:]]*=[^[:space:]]+'
-    '[Bb]earer[[:space:]]+[A-Za-z0-9._~+/=-]+'
-    '[a-zA-Z][a-zA-Z0-9+.-]*://[^/@[:space:]]+:[^/@[:space:]]+@'
-  )
   local marker="[REDACTED — possible credential]"
   local in_pem=false
   local out=""
@@ -241,7 +244,7 @@ redact() {
       fi
     else
       local pat
-      for pat in "${patterns[@]}"; do
+      for pat in "${_RESULT_CREDENTIAL_PATTERNS[@]}"; do
         if [[ "$line" =~ $pat ]]; then
           matched=true
           break
