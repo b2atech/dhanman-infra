@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Mock ss for bats tests.
+# Controlled via MOCK_SS_LISTENING (default: true) and MOCK_SS_PORT.
+set -euo pipefail
+
+if [[ "${MOCK_SS_LISTENING:-true}" == "true" ]]; then
+  printf 'LISTEN 0 128 127.0.0.1:%s 0.0.0.0:*\n' "${MOCK_SS_PORT:-5104}"
+fi
+exit 0

@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Mock curl for bats tests (used by both T1.3 SVC-03 and T1.4 HLT-01 tests).
+# Ignores all real network arguments. Honors the actual --write-out format
+# string passed in (space-separated for SVC-03, literal-newline-separated
+# for HLT-01) by substituting %{http_code} and %{time_total} into it, and
+# writes MOCK_CURL_BODY to the --output file if one other than /dev/null
+# was given.
+#
+# Controlled via:
+#   MOCK_CURL_HTTP_CODE  (default: 200)
+#   MOCK_CURL_TIME_TOTAL (default: 0.100)
+#   MOCK_CURL_BODY       (default: empty)
+#   MOCK_CURL_FAIL       (if set to any non-empty value: simulates a total
+#                         connection failure — http_code forced to "000",
+#                         time_total to "0.000", body ignored)
+set -euo pipefail
+
+http_code="${MOCK_CURL_HTTP_CODE:-200}"
+time_total="${MOCK_CURL_TIME_TOTAL:-0.100}"
+body="${MOCK_CURL_BODY:-}"
+
+if [[ -n "${MOCK_CURL_FAIL:-}" ]]; then
+  http_code="000"
+  time_total="0.000"
+  body=""
+fi
+
+write_out_fmt='%{http_code} %{time_total}'
+output_file=""
+
+args=("$@")
+i=0
+while [[ $i -lt ${#args[@]} ]]; do
+  case "${args[$i]}" in
+    --write-out)
+      i=$((i + 1))
+      write_out_fmt="${args[$i]:-$write_out_fmt}"
+      ;;
+    --output)
+      i=$((i + 1))
+      output_file="${args[$i]:-}"
+      ;;
+  esac
+  i=$((i + 1))
+done
+
+if [[ -n "$output_file" && "$output_file" != "/dev/null" ]]; then
+  printf '%s' "$body" > "$output_file"
+fi
+
+rendered="${write_out_fmt//'%{http_code}'/$http_code}"
+rendered="${rendered//'%{time_total}'/$time_total}"
+printf '%s' "$rendered"
+exit 0

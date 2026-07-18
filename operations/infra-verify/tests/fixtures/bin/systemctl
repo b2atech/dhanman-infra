@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Mock systemctl for bats tests.
+# Controlled via MOCK_SYSTEMCTL_STATE (default: active) and
+# MOCK_SYSTEMCTL_NRESTARTS (default: 0).
+set -euo pipefail
+
+state="${MOCK_SYSTEMCTL_STATE:-active}"
+nrestarts="${MOCK_SYSTEMCTL_NRESTARTS:-0}"
+
+case "${1:-}" in
+  is-active)
+    echo "$state"
+    if [[ "$state" == "active" ]]; then
+      exit 0
+    fi
+    exit 3
+    ;;
+  show)
+    echo "NRestarts=${nrestarts}"
+    echo "ActiveEnterTimestamp=Fri 2026-07-17 10:00:00 UTC"
+    exit 0
+    ;;
+  *)
+    echo "mock systemctl: unsupported subcommand: ${1:-}" >&2
+    exit 1
+    ;;
+esac

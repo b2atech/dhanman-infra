@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Mock journalctl for bats tests. Prints MOCK_JOURNAL_OUTPUT verbatim
+# (may contain embedded newlines set via $'...' in the calling test).
+set -euo pipefail
+
+printf '%s\n' "${MOCK_JOURNAL_OUTPUT:-mock journal line 1}"
+exit 0
