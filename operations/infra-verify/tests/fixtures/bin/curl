@@ -1,23 +1,47 @@
 #!/usr/bin/env bash
-# Mock curl for bats tests (used by both T1.3 SVC-03 and T1.4 HLT-01 tests).
-# Ignores all real network arguments. Honors the actual --write-out format
-# string passed in (space-separated for SVC-03, literal-newline-separated
-# for HLT-01) by substituting %{http_code} and %{time_total} into it, and
-# writes MOCK_CURL_BODY to the --output file if one other than /dev/null
-# was given.
+# Mock curl for bats tests (used by SVC-03, HLT-01, LK, and PM checks).
+# Ignores all real network arguments and emulates real curl's actual
+# body/--write-out/--output interaction:
+#   - no --output given            -> body prints to stdout
+#   - --output /dev/null           -> body discarded entirely
+#   - --output <file>              -> body written to that file
+#   - --write-out <fmt>, if given  -> rendered format ALWAYS appended to
+#                                     stdout afterwards (curl behaviour:
+#                                     write-out adds to output, it does
+#                                     not replace the body unless the
+#                                     body itself was redirected away)
 #
-# Controlled via:
-#   MOCK_CURL_HTTP_CODE  (default: 200)
-#   MOCK_CURL_TIME_TOTAL (default: 0.100)
-#   MOCK_CURL_BODY       (default: empty)
-#   MOCK_CURL_FAIL       (if set to any non-empty value: simulates a total
-#                         connection failure — http_code forced to "000",
-#                         time_total to "0.000", body ignored)
+# Controlled via (each family layers its own alias over the generic
+# MOCK_CURL_* vars, so multiple families' tests never collide on meaning
+# even though they share this one fixture):
+#   MOCK_CURL_HTTP_CODE   (default: 200)
+#   MOCK_CURL_TIME_TOTAL  (default: 0.100)
+#   MOCK_CURL_BODY        (default: empty) — generic response body
+#   MOCK_LOKI_BODY        (LK checks) overrides MOCK_CURL_BODY when set
+#   MOCK_LOKI_READY_BODY  (LK-01 /ready endpoint only, default: "ready")
+#   MOCK_LOKI_HTTP_CODE   (LK checks) overrides MOCK_CURL_HTTP_CODE when set
+#   MOCK_PROM_BODY        (PM checks) overrides MOCK_LOKI_BODY/MOCK_CURL_BODY
+#   MOCK_PROM_READY_BODY  (PM-01 /-/ready endpoint only, default: "ready";
+#                          "/ready" substring match also catches Loki's
+#                          "/ready" and Prometheus's "/-/ready" alike)
+#   MOCK_PROM_HTTP_CODE   (PM checks) overrides MOCK_LOKI_HTTP_CODE/
+#                          MOCK_CURL_HTTP_CODE
+#   MOCK_PROM_RELOAD_BODY (PM-06 only) response when the query parameter
+#                          contains "last_reload_successful" — overrides
+#                          MOCK_PROM_BODY for that specific call, letting
+#                          PM-06's two distinct queries (reload success,
+#                          rule freshness) return different canned values
+#                          within the same test
+#   MOCK_PROM_RULES_BODY  (PM-06 only) response when the query parameter
+#                          contains "rule_group_last_evaluation"
+#   MOCK_CURL_FAIL        (if set to any non-empty value: simulates a total
+#                          connection failure — http_code forced to "000",
+#                          time_total to "0.000", body ignored, exit 7)
 set -euo pipefail
 
-http_code="${MOCK_CURL_HTTP_CODE:-200}"
+http_code="${MOCK_PROM_HTTP_CODE:-${MOCK_LOKI_HTTP_CODE:-${MOCK_CURL_HTTP_CODE:-200}}}"
 time_total="${MOCK_CURL_TIME_TOTAL:-0.100}"
-body="${MOCK_CURL_BODY:-}"
+body="${MOCK_PROM_BODY:-${MOCK_LOKI_BODY:-${MOCK_CURL_BODY:-}}}"
 
 if [[ -n "${MOCK_CURL_FAIL:-}" ]]; then
   http_code="000"
@@ -25,8 +49,10 @@ if [[ -n "${MOCK_CURL_FAIL:-}" ]]; then
   body=""
 fi
 
-write_out_fmt='%{http_code} %{time_total}'
+write_out_fmt=""
 output_file=""
+url_arg=""
+query_arg=""
 
 args=("$@")
 i=0
@@ -34,21 +60,45 @@ while [[ $i -lt ${#args[@]} ]]; do
   case "${args[$i]}" in
     --write-out)
       i=$((i + 1))
-      write_out_fmt="${args[$i]:-$write_out_fmt}"
+      write_out_fmt="${args[$i]:-}"
       ;;
     --output)
       i=$((i + 1))
       output_file="${args[$i]:-}"
       ;;
+    query=*)
+      query_arg="${args[$i]}"
+      ;;
+    http://*|https://*)
+      url_arg="${args[$i]}"
+      ;;
   esac
   i=$((i + 1))
 done
 
-if [[ -n "$output_file" && "$output_file" != "/dev/null" ]]; then
-  printf '%s' "$body" > "$output_file"
+if [[ "$url_arg" == *"/ready"* ]]; then
+  body="${MOCK_PROM_READY_BODY-${MOCK_LOKI_READY_BODY-ready}}"
+elif [[ "$query_arg" == *"last_reload_successful"* && -n "${MOCK_PROM_RELOAD_BODY+x}" ]]; then
+  body="$MOCK_PROM_RELOAD_BODY"
+elif [[ "$query_arg" == *"rule_group_last_evaluation"* && -n "${MOCK_PROM_RULES_BODY+x}" ]]; then
+  body="$MOCK_PROM_RULES_BODY"
 fi
 
-rendered="${write_out_fmt//'%{http_code}'/$http_code}"
-rendered="${rendered//'%{time_total}'/$time_total}"
-printf '%s' "$rendered"
+if [[ -n "$output_file" ]]; then
+  if [[ "$output_file" != "/dev/null" ]]; then
+    printf '%s' "$body" > "$output_file"
+  fi
+else
+  printf '%s' "$body"
+fi
+
+if [[ -n "$write_out_fmt" ]]; then
+  rendered="${write_out_fmt//'%{http_code}'/$http_code}"
+  rendered="${rendered//'%{time_total}'/$time_total}"
+  printf '%s' "$rendered"
+fi
+
+if [[ -n "${MOCK_CURL_FAIL:-}" ]]; then
+  exit 7
+fi
 exit 0
