@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Mock docker for bats tests (PT checks). No real container calls.
+# Controlled via:
+#   MOCK_DOCKER_STATUS          PT-01, default: running
+#   MOCK_DOCKER_RESTARTCOUNT    PT-01, default: 0
+#   MOCK_DOCKER_STARTEDAT       PT-01, default: 2026-07-18T00:00:00Z
+#   MOCK_DOCKER_READY           PT-02 response body, default: Ready
+#   MOCK_DOCKER_POSITIONS_MTIME PT-05, epoch seconds; unset/empty = file
+#                                missing (stat exits non-zero)
+#   MOCK_DOCKER_LOGS            PT-06 raw log content, default: empty
+set -euo pipefail
+
+case "${1:-}" in
+  inspect)
+    printf '%s %s %s' \
+      "${MOCK_DOCKER_STATUS:-running}" \
+      "${MOCK_DOCKER_RESTARTCOUNT:-0}" \
+      "${MOCK_DOCKER_STARTEDAT:-2026-07-18T00:00:00Z}"
+    exit 0
+    ;;
+  exec)
+    shift 2 || true
+    case "${1:-}" in
+      wget)
+        printf '%s' "${MOCK_DOCKER_READY-Ready}"
+        exit 0
+        ;;
+      stat)
+        if [[ -z "${MOCK_DOCKER_POSITIONS_MTIME:-}" ]]; then
+          exit 1
+        fi
+        printf '%s' "$MOCK_DOCKER_POSITIONS_MTIME"
+        exit 0
+        ;;
+      *)
+        exit 1
+        ;;
+    esac
+    ;;
+  logs)
+    printf '%s' "${MOCK_DOCKER_LOGS:-}"
+    exit 0
+    ;;
+  *)
+    echo "mock docker: unsupported subcommand: ${1:-}" >&2
+    exit 1
+    ;;
+esac
