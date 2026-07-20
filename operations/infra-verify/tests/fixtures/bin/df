@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Mock df for bats tests. Mimics `df --output=pcent|ipcent` output shape
+# (a header line, then the percentage value line).
+# Controlled via MOCK_DF_PCENT and MOCK_DF_IPCENT (both default 10).
+set -euo pipefail
+
+pcent="${MOCK_DF_PCENT:-10}"
+ipcent="${MOCK_DF_IPCENT:-10}"
+
+for arg in "$@"; do
+  case "$arg" in
+    --output=pcent)
+      printf 'Use%%\n%s%%\n' "$pcent"
+      exit 0
+      ;;
+    --output=ipcent)
+      printf 'IUse%%\n%s%%\n' "$ipcent"
+      exit 0
+      ;;
+  esac
+done
+
+printf 'Use%%\n%s%%\n' "$pcent"
+exit 0

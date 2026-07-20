@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Mock `stat` for bats tests. Passes through to the real stat for every
+# call EXCEPT the ownership query (--format="%U %G"), which is only
+# intercepted when MOCK_STAT_OWNER_GROUP is set — letting ownership
+# tests simulate www-data without needing root/chown, while mode/mtime/
+# size queries still hit the real filesystem via the real stat.
+set -euo pipefail
+
+REAL_STAT="$(command -v -p stat)"
+
+if [[ -n "${MOCK_STAT_OWNER_GROUP:-}" ]]; then
+  for arg in "$@"; do
+    if [[ "$arg" == '--format=%U %G' ]]; then
+      printf '%s' "$MOCK_STAT_OWNER_GROUP"
+      exit 0
+    fi
+  done
+fi
+
+exec "$REAL_STAT" "$@"
