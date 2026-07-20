@@ -1,0 +1,16 @@
+# msmtp configuration for infra-verify daily reports.
+# Credentials sourced from Vault; never logged or displayed.
+# File mode: 600 (root-readable only)
+
+defaults
+auth           on
+tls            {{ infra_verify_smtp_use_tls | lower }}
+tls_trust_file /etc/ssl/certs/ca-certificates.crt
+logfile        ~/.msmtp.log
+
+account default
+host           {{ infra_verify_smtp_host }}
+port           {{ infra_verify_smtp_port }}
+from           {{ infra_verify_smtp_from }}
+user           {{ vault_smtp_username }}
+password       {{ vault_smtp_password }}

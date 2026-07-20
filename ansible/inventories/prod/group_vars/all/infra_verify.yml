@@ -1,0 +1,16 @@
+---
+# PROD-specific infra-verify configuration
+
+# Schedule: 06:15 IST daily (same as QA for consistency)
+infra_verify_schedule_hour: "06"
+infra_verify_schedule_minute: "15"
+
+# Recipients: CTO + COO + Infra Lead
+# (Enable only after 5 QA days and manual sign-off)
+infra_verify_recipients:
+  - "coo@dhanman.com"
+  - "cto@dhanman.com"
+  - "devops@b2atech.in"
+
+# PROD is less verbose
+infra_verify_log_level: "WARNING"

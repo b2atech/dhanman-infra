@@ -1,0 +1,41 @@
+#!/bin/bash
+# Daily cron wrapper for infra-verify engine.
+# Logs to syslog with structured tags; never logs secrets.
+# Lock file prevents overlapping runs (returns 75 if held).
+
+set -euo pipefail
+
+readonly SCRIPT_DIR="{{ infra_verify_dest }}/bin"
+readonly SCRIPT="$SCRIPT_DIR/run-infra-report.sh"
+readonly LOCK_FILE="{{ infra_verify_lock_file }}"
+readonly LOG_TAG="infra-verify-cron[{{ ansible_hostname }}]"
+readonly ENVIRONMENT="{{ inventory_hostname_short }}"  # qa or prod
+
+# Log to syslog
+log_info() { echo "{{ infra_verify_log_level }}: $@" | logger -t "$LOG_TAG" -p user.info; }
+log_error() { echo "ERROR: $@" | logger -t "$LOG_TAG" -p user.err; }
+
+log_info "Starting daily check run (environment=$ENVIRONMENT)"
+
+# Verify script exists
+if [[ ! -x "$SCRIPT" ]]; then
+  log_error "Script not found or not executable: $SCRIPT"
+  exit 3
+fi
+
+# Run engine
+cd "{{ infra_verify_dest }}"
+"$SCRIPT" --environment "$ENVIRONMENT" 2>&1 | while IFS= read -r line; do
+  logger -t "$LOG_TAG" -p user.info -- "$line"
+done
+rc=${PIPESTATUS[0]}
+
+case "$rc" in
+  0) log_info "Run succeeded (HEALTHY, exit=$rc)" ;;
+  1) log_info "Run complete with warnings (exit=$rc)" ;;
+  2) log_info "Run complete with critical findings (exit=$rc)" ;;
+  75) log_error "Lock held; run already in progress (exit=$rc)" ;;
+  *) log_error "Engine failure (exit=$rc)" ;;
+esac
+
+exit "$rc"

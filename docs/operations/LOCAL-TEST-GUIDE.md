@@ -5,6 +5,16 @@
 report renderers all exist and are unit-tested — 207/207 bats tests
 passing. **The entrypoint does not yet call any of them.**)
 
+> **Phase 7 update:** the entrypoint wiring described as missing below has
+> since landed, and the engine is now deployed to QA/PROD via a dedicated
+> Ansible role (`ansible/roles/infra_verify/`) instead of manual copy.
+> Part A (local preflight) below is still accurate and still useful before
+> touching a real host. Part B ("first live run") should now be done via
+> the Ansible role rather than manually copying files over SSH — see
+> **`docs/operations/phase-7-deployment.md`** for the QA/PROD deployment
+> and verification runbook. This file is kept as-is for the local-preflight
+> content; treat its Part B SSH instructions as superseded.
+
 ---
 
 ## ⚠️ Read this before running anything

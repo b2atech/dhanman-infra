@@ -1,0 +1,45 @@
+---
+# ansible/roles/infra_verify/defaults/main.yml
+# Defaults for the infra-verify check engine deployment role.
+# All variables are overridable at the inventory/group_vars level.
+
+# User and group for the engine
+infraverify_user: infraverify
+infraverify_group: infraverify
+infraverify_home: /opt/infra-verify
+infraverify_shell: /usr/sbin/nologin
+
+# Source and destination paths
+infra_verify_repo_source: "{{ playbook_dir }}/../operations/infra-verify"
+infra_verify_dest: /opt/infra-verify
+
+# SMTP configuration (Vault-sourced in tasks; defaults here for reference)
+smtp_host: smtp-relay.brevo.com
+smtp_port: 587
+smtp_from: infra-report@dhanman.com
+smtp_use_tls: yes
+
+# Daily schedule (cron, 24-hour format, timezone IST)
+# Override in group_vars per environment
+infra_verify_schedule_hour: "06"
+infra_verify_schedule_minute: "15"
+
+# Report recipients (override in group_vars per environment)
+# QA: infra lead + devops team
+# PROD: CTO + COO + infra lead (after 5 QA days)
+infra_verify_recipients: "{{ alert_emails | default(['devops@example.com']) }}"
+
+# Cron job name (used in /etc/cron.d/ naming)
+infra_verify_cron_name: "infra-verify-daily"
+
+# Lock file for preventing overlapping runs
+infra_verify_lock_file: /var/lock/infra-verify.lock
+
+# History directory (on host, gitignored)
+infra_verify_history_dir: "{{ infra_verify_dest }}/history"
+
+# Audit log directory
+infra_verify_audit_dir: /var/log/dhanman/infra-audit
+
+# Log level for cron wrapper (DEBUG, INFO, WARNING, ERROR)
+infra_verify_log_level: INFO

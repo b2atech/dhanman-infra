@@ -1,0 +1,182 @@
+---
+# ansible/roles/infra_verify/tasks/main.yml
+# Deploy infra-verify read-only check engine to host.
+# Tasks: create user, copy files, set permissions, SMTP config, cron entry.
+
+# ============================================================================
+# User & Group Setup
+# ============================================================================
+
+- name: Create infraverify group
+  group:
+    name: "{{ infraverify_group }}"
+    state: present
+
+- name: Create infraverify user
+  user:
+    name: "{{ infraverify_user }}"
+    group: "{{ infraverify_group }}"
+    home: "{{ infraverify_home }}"
+    shell: "{{ infraverify_shell }}"
+    state: present
+    system: yes
+
+- name: Add infraverify to systemd-journal group (for SVC-06 journal reads)
+  user:
+    name: "{{ infraverify_user }}"
+    groups: "{{ infraverify_group }},systemd-journal"
+    append: yes
+    state: present
+
+# ============================================================================
+# Directory & File Deployment
+# ============================================================================
+
+- name: Create infra-verify destination directory
+  file:
+    path: "{{ infra_verify_dest }}"
+    owner: "{{ infraverify_user }}"
+    group: "{{ infraverify_group }}"
+    mode: '0755'
+    state: directory
+
+- name: Copy engine files from repo to host
+  synchronize:
+    src: "{{ infra_verify_repo_source }}/"
+    dest: "{{ infra_verify_dest }}/"
+    delete: yes
+    rsync_opts:
+      - "--exclude=history"
+      - "--exclude=.bats"
+      - "--exclude=tests"
+  delegate_to: "{{ inventory_hostname }}"
+  become: no
+
+- name: Set ownership of engine files
+  file:
+    path: "{{ infra_verify_dest }}"
+    owner: "{{ infraverify_user }}"
+    group: "{{ infraverify_group }}"
+    recurse: yes
+    state: directory
+
+- name: Make entrypoint executable
+  file:
+    path: "{{ infra_verify_dest }}/bin/run-infra-report.sh"
+    owner: "{{ infraverify_user }}"
+    group: "{{ infraverify_group }}"
+    mode: '0755'
+    state: file
+
+- name: Create history directory (for reports)
+  file:
+    path: "{{ infra_verify_history_dir }}"
+    owner: "{{ infraverify_user }}"
+    group: "{{ infraverify_group }}"
+    mode: '0755'
+    state: directory
+
+- name: Create audit log directory
+  file:
+    path: "{{ infra_verify_audit_dir }}"
+    owner: root
+    group: adm
+    mode: '0755'
+    state: directory
+
+# ============================================================================
+# ACL Setup: Log Directory Access
+# ============================================================================
+
+- name: Install acl utility (for setfacl)
+  package:
+    name: acl
+    state: present
+
+- name: Grant infraverify read access to service logs directory
+  acl:
+    path: "{{ services_base_dir }}/logs"
+    entity: "{{ infraverify_user }}"
+    etype: user
+    permissions: rx
+    state: present
+
+# ============================================================================
+# SMTP Configuration (Vault-sourced)
+# ============================================================================
+
+- name: Fetch SMTP credentials from Vault
+  set_fact:
+    vault_smtp_username: "{{ lookup('hashi_vault', 'secret=secret/shared/global:smtp_username') }}"
+    vault_smtp_password: "{{ lookup('hashi_vault', 'secret=secret/shared/global:smtp_password') }}"
+  no_log: yes
+
+- name: Render msmtprc config (SMTP credentials from Vault)
+  template:
+    src: msmtprc.j2
+    dest: /root/.msmtprc
+    owner: root
+    group: root
+    mode: '0600'
+  vars:
+    infra_verify_smtp_host: "{{ smtp_host }}"
+    infra_verify_smtp_port: "{{ smtp_port }}"
+    infra_verify_smtp_from: "{{ smtp_from }}"
+    infra_verify_smtp_use_tls: "{{ smtp_use_tls }}"
+  no_log: yes
+
+# ============================================================================
+# Cron Job Setup
+# ============================================================================
+
+- name: Render cron wrapper script
+  template:
+    src: cron-run.sh.j2
+    dest: "{{ infra_verify_dest }}/cron-run.sh"
+    owner: root
+    group: root
+    mode: '0755'
+  vars:
+    infra_verify_dest: "{{ infra_verify_dest }}"
+    infra_verify_lock_file: "{{ infra_verify_lock_file }}"
+    infra_verify_log_level: "{{ infra_verify_log_level }}"
+
+- name: Install daily cron job
+  cron:
+    name: "{{ infra_verify_cron_name }}"
+    user: root
+    minute: "{{ infra_verify_schedule_minute }}"
+    hour: "{{ infra_verify_schedule_hour }}"
+    job: "{{ infra_verify_dest }}/cron-run.sh"
+    cron_file: "{{ infra_verify_cron_name }}"
+    state: present
+
+# ============================================================================
+# Verification
+# ============================================================================
+
+- name: Verify engine files deployed
+  stat:
+    path: "{{ infra_verify_dest }}/bin/run-infra-report.sh"
+  register: engine_stat
+
+- name: Fail if engine not deployed
+  fail:
+    msg: "Engine deployment failed; entrypoint not found at {{ infra_verify_dest }}/bin/run-infra-report.sh"
+  when: not engine_stat.stat.exists
+
+- name: Verify cron job installed
+  command: grep "{{ infra_verify_cron_name }}" /etc/cron.d/*
+  register: cron_check
+  failed_when: cron_check.rc != 0
+  changed_when: no
+
+- name: Log deployment completion
+  debug:
+    msg: |
+      infra-verify engine deployed successfully.
+      - User: {{ infraverify_user }} (groups: systemd-journal)
+      - Path: {{ infra_verify_dest }}
+      - Cron: {{ infra_verify_schedule_hour }}:{{ infra_verify_schedule_minute }} daily
+      - History: {{ infra_verify_history_dir }}
+      - Audit: {{ infra_verify_audit_dir }}
