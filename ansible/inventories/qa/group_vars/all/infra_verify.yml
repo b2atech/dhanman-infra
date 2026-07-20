@@ -1,0 +1,15 @@
+---
+# QA-specific infra-verify configuration
+
+# Schedule: 06:15 IST daily
+infra_verify_schedule_hour: "06"
+infra_verify_schedule_minute: "15"
+
+# Recipients: QA infra lead + ops team (first 3 days)
+# After 3 days pass and review is positive, add COO/CTO
+infra_verify_recipients:
+  - "pranitbkhamkar@gmail.com"  # ops team
+  - "devops@b2atech.in"         # infra lead (update with real address)
+
+# QA can be verbose
+infra_verify_log_level: "INFO"

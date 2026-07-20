@@ -12,6 +12,7 @@
 #                   ... --tags monitoring
 #                   ... --tags nginx
 #                   ... --tags backup
+#                   ... --tags infra_verify
 
 - name: Install infrastructure
   hosts: all
@@ -46,3 +47,7 @@
 
     - role: backup
       tags: backup
+
+    - role: infra_verify
+      tags: infra_verify
+      when: inventory_hostname in groups.get('qa', []) or inventory_hostname in groups.get('prod', [])
