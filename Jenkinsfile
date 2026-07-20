@@ -42,6 +42,10 @@ pipeline {
                 sh '''
                     ansible --version
                     ansible-lint --version 2>/dev/null || true
+                    echo "=== ShellCheck ==="
+                    find operations/infra-verify -name "*.sh" -type f | xargs shellcheck --severity=warning
+                    find ansible/roles/infra_verify/templates -name "*.j2" -type f | xargs shellcheck --severity=warning
+                    echo "ShellCheck complete"
                 '''
             }
         }
