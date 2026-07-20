@@ -19,6 +19,25 @@ readonly AUDIT_LOG="/var/log/dhanman/infra-audit"
 readonly DEFAULT_TIMEOUT=5
 readonly GLOBAL_TIMEOUT=600
 
+# shellcheck source=SCRIPTDIR/../lib/result.sh
+source "${SCRIPT_DIR}/../lib/result.sh"
+# shellcheck source=SCRIPTDIR/../lib/report.sh
+source "${SCRIPT_DIR}/../lib/report.sh"
+# shellcheck source=SCRIPTDIR/../checks/services.sh
+source "${SCRIPT_DIR}/../checks/services.sh"
+# shellcheck source=SCRIPTDIR/../checks/health.sh
+source "${SCRIPT_DIR}/../checks/health.sh"
+# shellcheck source=SCRIPTDIR/../checks/logfile.sh
+source "${SCRIPT_DIR}/../checks/logfile.sh"
+# shellcheck source=SCRIPTDIR/../checks/promtail.sh
+source "${SCRIPT_DIR}/../checks/promtail.sh"
+# shellcheck source=SCRIPTDIR/../checks/loki.sh
+source "${SCRIPT_DIR}/../checks/loki.sh"
+# shellcheck source=SCRIPTDIR/../checks/prometheus.sh
+source "${SCRIPT_DIR}/../checks/prometheus.sh"
+# shellcheck source=SCRIPTDIR/../checks/grafana.sh
+source "${SCRIPT_DIR}/../checks/grafana.sh"
+
 readonly ALLOWED_ENVIRONMENTS=(qa prod)
 readonly ALLOWED_COMPONENTS=(services health logging promtail loki prometheus grafana)
 readonly ALLOWED_SERVICES=(
@@ -209,24 +228,114 @@ release_lock() {
 }
 
 # ---------------------------------------------------------------------------
-# Check stubs — implemented in T1.3 (SVC/HLT) and later phases
+# run_checks_for_env <env> — dispatches to the real check families, gated by
+# --component (empty COMPONENT runs all seven families). Each run_*_checks
+# call writes its own result_add entries directly into $RESULT_FILE (set by
+# result_init, called by the caller before this runs) — this function's
+# own return values are discarded; report_build reads $RESULT_FILE as a
+# whole, not anything returned here.
+#
+# Cross-family hints (e.g. threading Promtail's status into the Loki
+# verdict) are intentionally NOT wired here: run_pt_checks only exposes its
+# overall worst status, not the individual sub-check (e.g. PT-04) that
+# run_loki_checks' optional params expect, so a partial thread-through would
+# be cosmetic. Per each function's own integration notes, omitting these
+# optional params just means the layer-specific verdict refinement doesn't
+# fire — the worst-of overall_status is unaffected either way.
 # ---------------------------------------------------------------------------
-check_services_stub()   { :; }
-check_health_stub()     { :; }
-check_logging_stub()    { :; }
-check_promtail_stub()   { :; }
-check_loki_stub()       { :; }
-check_prometheus_stub() { :; }
-check_grafana_stub()    { :; }
+run_checks_for_env() {
+  local env="$1"
 
+  if [[ -z "$COMPONENT" || "$COMPONENT" == "services" ]]; then
+    run_svc_checks "$env" >/dev/null
+  fi
+  if [[ -z "$COMPONENT" || "$COMPONENT" == "health" ]]; then
+    run_hlt_checks "$env" >/dev/null
+  fi
+  if [[ -z "$COMPONENT" || "$COMPONENT" == "logging" ]]; then
+    run_log_checks "$env" >/dev/null
+  fi
+  if [[ -z "$COMPONENT" || "$COMPONENT" == "promtail" ]]; then
+    run_pt_checks "$env" >/dev/null
+  fi
+  if [[ -z "$COMPONENT" || "$COMPONENT" == "loki" ]]; then
+    run_loki_checks "$env" >/dev/null
+  fi
+  if [[ -z "$COMPONENT" || "$COMPONENT" == "prometheus" ]]; then
+    run_pm_checks "$env" >/dev/null
+  fi
+  if [[ -z "$COMPONENT" || "$COMPONENT" == "grafana" ]]; then
+    run_grafana_checks "$env" >/dev/null
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# run_checks — result_init + dispatch per target environment, then
+# report_build/report_render_html written to $HISTORY_DIR. Returns the
+# worst-of exit code across all environments run: 0=HEALTHY, 1=WARNING,
+# 2=CRITICAL (per the master plan's intended mapping, not previously
+# implemented).
+#
+# --service is currently validated against the inventory allowlist
+# (validate_args) but not enforced here — none of the check-family
+# run_*_checks functions accept a per-service filter, they always loop the
+# full inventory. Flagged via a log line below rather than silently
+# ignored.
+# ---------------------------------------------------------------------------
 run_checks() {
-  check_services_stub
-  check_health_stub
-  check_logging_stub
-  check_promtail_stub
-  check_loki_stub
-  check_prometheus_stub
-  check_grafana_stub
+  local -a envs=()
+  if $ALL_FLAG; then
+    envs=(qa prod)
+  else
+    envs=("$ENVIRONMENT")
+  fi
+
+  mkdir -p "$HISTORY_DIR"
+
+  if [[ -n "$SERVICE" ]]; then
+    log INFO "--service=${SERVICE} is accepted but not yet enforced by the check family layer — running the full inventory for the target environment(s)"
+  fi
+
+  local overall_worst="HEALTHY"
+  local env
+  for env in "${envs[@]}"; do
+    result_init "$RUN_ID" "$env"
+
+    run_checks_for_env "$env"
+
+    local report_json
+    report_json="$(report_build)"
+
+    local report_file_json="${HISTORY_DIR}/report-${env}-${RUN_ID}.json"
+    local report_file_html="${HISTORY_DIR}/report-${env}-${RUN_ID}.html"
+
+    printf '%s' "$report_json" > "$report_file_json"
+    report_render_html "$report_json" > "$report_file_html"
+
+    local env_status
+    env_status="$(python3 -c "
+import json, sys
+print(json.load(open(sys.argv[1])).get('overall_status', 'UNKNOWN'))
+" "$report_file_json")"
+
+    log INFO "Report written: ${report_file_json} / ${report_file_html} (overall_status=${env_status})"
+
+    case "$env_status" in
+      CRITICAL)
+        overall_worst="CRITICAL"
+        ;;
+      WARNING)
+        [[ "$overall_worst" != "CRITICAL" ]] && overall_worst="WARNING"
+        ;;
+    esac
+  done
+
+  case "$overall_worst" in
+    HEALTHY) return 0 ;;
+    WARNING) return 1 ;;
+    CRITICAL) return 2 ;;
+    *) return 0 ;;
+  esac
 }
 
 # ---------------------------------------------------------------------------
@@ -243,7 +352,7 @@ run_with_timeout() {
   (
     sleep "$timeout_secs"
     kill -TERM "$pid" 2>/dev/null || true
-  ) &
+  ) </dev/null >/dev/null 2>&1 &
   local watchdog_pid=$!
 
   local exit_code=0
@@ -281,12 +390,10 @@ main() {
   if [[ $rc -eq 143 ]]; then
     log ERROR "Run exceeded global timeout of ${GLOBAL_TIMEOUT}s — aborting"
     exit 3
-  elif [[ $rc -ne 0 ]]; then
-    exit "$rc"
   fi
 
-  log INFO "Completed infra-verify run_id=${RUN_ID}"
-  return 0
+  log INFO "Completed infra-verify run_id=${RUN_ID} (exit=${rc})"
+  exit "$rc"
 }
 
 # ---------------------------------------------------------------------------
