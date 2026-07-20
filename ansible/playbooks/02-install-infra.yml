@@ -50,4 +50,4 @@
 
     - role: infra_verify
       tags: infra_verify
-      when: inventory_hostname in groups.get('qa', []) or inventory_hostname in groups.get('prod', [])
+      when: inventory_hostname in groups.get('dhanman_qa', []) or inventory_hostname in groups.get('dhanman_prod', [])
