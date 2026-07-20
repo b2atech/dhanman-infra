@@ -100,8 +100,6 @@
     etype: user
     permissions: rx
     state: present
-  vars:
-    services_base_dir: "/var/www/{{ inventory_hostname_short }}"
 
 # ============================================================================
 # SMTP Configuration (Vault-sourced)

@@ -178,7 +178,7 @@ the *run itself* failed or was skipped — see Troubleshooting.
 Then confirm output landed where expected:
 ```bash
 ls -la /opt/infra-verify/history/          # a report-qa-<timestamp>.json and .html
-sudo journalctl -t 'infra-verify-cron[*]' -n 50 --no-pager   # syslog trail of the run
+sudo journalctl --no-pager | grep infra-verify-cron | tail -50   # syslog trail of the run
 ```
 
 And confirm the email actually arrived in the QA recipients' inboxes (see
@@ -189,7 +189,7 @@ And confirm the email actually arrived in the QA recipients' inboxes (see
 This is not optional. Let the daily cron job run unattended for **3 consecutive days**
 and confirm, each day:
 
-- [ ] Cron fired at the scheduled time (`journalctl -t 'infra-verify-cron[*]'` shows a
+- [ ] Cron fired at the scheduled time (`journalctl | grep infra-verify-cron` shows a
       "Starting daily check run" line at ~06:15 IST)
 - [ ] The run completed with an exit code you'd expect given real system state (`0` or
       `1` under normal conditions)
@@ -290,7 +290,7 @@ comment out the role block in `ansible/playbooks/02-install-infra.yml`:
 ```yaml
     # - role: infra_verify
     #   tags: infra_verify
-    #   when: inventory_hostname in groups.get('qa', []) or inventory_hostname in groups.get('prod', [])
+    #   when: inventory_hostname in groups.get('dhanman_qa', []) or inventory_hostname in groups.get('dhanman_prod', [])
 ```
 
 This does not retroactively undo anything already on the host (cron entry, user,
@@ -315,10 +315,10 @@ sudo rm -f /root/.msmtprc
 | Symptom | Likely cause | What to do |
 |---|---|---|
 | Playbook fails at "Fetch SMTP credentials from Vault" | Vault is sealed, or the AppRole/SecretID used for `vault_role_id` doesn't have read access to `secret/shared/global` | `vault status` on the host; unseal if needed (see `CLAUDE.md`). Confirm the SecretID hasn't expired (see prior incident: Vault AppRole SecretID expiry after domain migration) |
-| Playbook succeeds but role reports `changed=0` on every run and cron never appears | The role's `when` condition (`inventory_hostname in groups.get('qa', []) or ... groups.get('prod', [])`) doesn't match your inventory's actual group names — the QA/PROD `hosts` files define `[dhanman_qa]` / `[dhanman_prod]`, not `[qa]` / `[prod]` | Check `ansible-playbook ... --tags infra_verify -vv` output for a `skipping` message on the `infra_verify` role. If skipped, the `when` clause needs the real group name (`dhanman_qa`/`dhanman_prod`) or an explicit `-l <hostname>` limit that bypasses the group check entirely — flag to whoever owns Task 3's playbook wiring before relying on this rollout |
+| Playbook fails at "Grant infraverify read access to service logs directory" (`acl` module, path not found) | The task's log directory path must resolve to the inventory-defined `services_base_dir` (`/var/www/qa` or `/var/www/prod`, set in each environment's `group_vars/all/main.yml`) — if it instead resolves to something host-name-derived (e.g. `/var/www/dm-qa`), the path won't exist and the `acl` module errors | Confirm the task uses the global `services_base_dir` var (no task-local override) — check `ansible/roles/infra_verify/tasks/main.yml`'s ACL task has no `vars:` block shadowing it. Then verify the target dir with `ls -ld {{ services_base_dir }}/logs` on the host before re-running |
 | Cron entry exists but never fires | Host's system cron daemon isn't running, or `/etc/cron.d/infra-verify-daily` has bad syntax | `sudo systemctl status cron`; `sudo cat /etc/cron.d/infra-verify-daily` — check for a trailing newline and correct 5-field schedule; `sudo run-parts --test /etc/cron.d` won't apply here (this is cron.d, not cron.daily) — use `crontab -l -u root` style validation via `sudo cat` instead |
 | Email never arrives, run exits 0 | SMTP credentials wrong/expired in Vault, or relay blocking the host's IP, or msmtp misconfigured | `sudo msmtp --debug -a default <test-address>` on the host (never paste the debug output containing credentials into chat/tickets — read it locally only); check msmtp's own log at `~root/.msmtp.log` |
-| Run exits `3` (engine failure) | Script crashed, a check module errored unexpectedly, or a dependency (`python3`, `curl`) is missing on the host | `sudo journalctl -t 'infra-verify-cron[*]' -n 100 --no-pager` for the full trail; re-run manually with `sudo /opt/infra-verify/bin/run-infra-report.sh --environment <qa|prod>` (not the cron wrapper) to see raw stderr |
+| Run exits `3` (engine failure) | Script crashed, a check module errored unexpectedly, or a dependency (`python3`, `curl`) is missing on the host | `sudo journalctl --no-pager \| grep infra-verify-cron \| tail -100` for the full trail; re-run manually with `sudo /opt/infra-verify/bin/run-infra-report.sh --environment <qa|prod>` (not the cron wrapper) to see raw stderr |
 | Two runs overlap / run exits `75` | A previous run is still executing when cron fires again — normally caused by a hung check (e.g., a slow `docker exec` call) rather than the schedule itself | This is not a failure by design (`75` = "skipped, lock held", not "crashed"). If it happens repeatedly, investigate why a run is taking longer than the interval to the next scheduled run, not just the lock |
 | Lock file stuck (every run exits `75` even though no run is actually in progress) | A previous run was killed (OOM, host reboot mid-run) without releasing `/var/lock/infra-verify.lock` | Confirm no `run-infra-report.sh` process is actually running (`ps aux \| grep run-infra-report`), then `sudo rm /var/lock/infra-verify.lock` and re-run manually to confirm it now completes |
 | `journalctl` / "Operation not permitted" in the SVC-06 check | `infraverify` isn't in the `systemd-journal` group (role task didn't apply, or ran before this task existed) | `id infraverify` should list `systemd-journal`; if missing, re-run the role (`--tags infra_verify`) — this task is idempotent and safe to repeat |
@@ -334,12 +334,16 @@ Phase 7 completes the deployment mechanics. Follow-on work (not part of this pha
   the existing Grafana/Uptime Kuma alerting paths), historical trend dashboards built
   from the accumulated `history/` JSON reports, and possibly a lightweight web view of
   the latest report instead of only email/file access.
-- **Known open item from this phase**: the `when` clause gating the role in
-  `ansible/playbooks/02-install-infra.yml` references inventory groups `qa`/`prod`,
-  while the actual QA/PROD `hosts` files define `dhanman_qa`/`dhanman_prod` — see the
-  second row of the troubleshooting table above. Confirm this is resolved (or
-  intentionally bypassed with `-l <hostname>`) before treating this rollout as fully
-  automated end-to-end.
+- **Fixed during this phase (verify on first real run)**: two inventory-mismatch bugs
+  were caught during doc review and corrected before the first deployment — (1) the
+  role's `when` clause originally referenced inventory groups `qa`/`prod` instead of the
+  real group names `dhanman_qa`/`dhanman_prod`, and (2) the ACL task originally
+  recomputed its own `services_base_dir` from `inventory_hostname_short` instead of
+  reusing the correct, already-defined global var, which would have pointed it at
+  `/var/www/dm-qa` instead of `/var/www/qa`. Both are fixed in the current role/playbook,
+  but since neither has been exercised against a real host yet, treat the very first QA
+  run as the actual validation of both fixes — see the troubleshooting table above if
+  either resurfaces.
 - **PgBouncer / Vault-on-old-server cleanup** and other longstanding infra TODOs remain
   tracked in `CLAUDE.md` — unrelated to this phase but worth keeping in view during any
   future infra_verify role changes, since they share the same playbook.
