@@ -12,8 +12,8 @@ infra_verify_schedule_minute: "15"
 infra_verify_recipients:
   - "bharatmane@gmail.com"      # ceo
   - "pranitbkhamkar@gmail.com"  # coo
-  - "ops-lead@dhanman.com"      # infra_lead (placeholder — update when assigned)
-  - "devops@dhanman.com"        # devops (placeholder — update when assigned)
+  #- "ops-lead@dhanman.com"      # infra_lead (placeholder — update when assigned)
+  #- "devops@dhanman.com"        # devops (placeholder — update when assigned)
 
 # PROD is less verbose
 infra_verify_log_level: "WARNING"
