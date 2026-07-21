@@ -5,12 +5,15 @@
 infra_verify_schedule_hour: "06"
 infra_verify_schedule_minute: "15"
 
-# Recipients: CTO + COO + Infra Lead
-# (Enable only after 5 QA days and manual sign-off)
+# Recipients
+# (Enable only after 3+ QA days pass and manual sign-off)
+# NOTE: not yet functional — nothing in operations/infra-verify/lib/report.sh
+# sends email yet (deferred as T6.4); this only prepares config for when it is.
 infra_verify_recipients:
-  - "coo@dhanman.com"
-  - "cto@dhanman.com"
-  - "devops@b2atech.in"
+  - "bharatmane@gmail.com"      # ceo
+  - "pranitbkhamkar@gmail.com"  # coo
+  - "ops-lead@dhanman.com"      # infra_lead (placeholder — update when assigned)
+  - "devops@dhanman.com"        # devops (placeholder — update when assigned)
 
 # PROD is less verbose
 infra_verify_log_level: "WARNING"
