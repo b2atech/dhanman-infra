@@ -105,6 +105,11 @@
 # SMTP Configuration (Vault-sourced)
 # ============================================================================
 
+- name: Install msmtp (report email delivery, Phase 10.1)
+  package:
+    name: msmtp
+    state: present
+
 - name: Fetch SMTP credentials from Vault
   set_fact:
     vault_smtp_username: "{{ lookup('hashi_vault', 'secret=secret/shared/global:smtp_username') }}"
@@ -140,6 +145,7 @@
     infra_verify_dest: "{{ infra_verify_dest }}"
     infra_verify_lock_file: "{{ infra_verify_lock_file }}"
     infra_verify_log_level: "{{ infra_verify_log_level }}"
+    infra_verify_recipients: "{{ infra_verify_recipients }}"
 
 - name: Install daily cron job
   cron:
@@ -150,6 +156,89 @@
     job: "{{ infra_verify_dest }}/cron-run.sh"
     cron_file: "{{ infra_verify_cron_name }}"
     state: present
+
+# ============================================================================
+# Repair Script Deployment (Phase 10.6)
+# ============================================================================
+# Deploys operations/repairs/ (Phase 8) so the scripts actually exist on
+# the host to be run manually, and grants a dedicated, least-privilege
+# group (not the unprivileged infraverify account, not blanket sudo) the
+# ability to run exactly the approved repair scripts via sudo.
+
+- name: Create repairs deployment directory
+  file:
+    path: "{{ infra_verify_repairs_dest }}"
+    owner: root
+    group: root
+    mode: '0755'
+    state: directory
+
+- name: Copy repair scripts from repo to host
+  synchronize:
+    src: "{{ infra_verify_repairs_source }}/"
+    dest: "{{ infra_verify_repairs_dest }}/"
+    delete: yes
+    rsync_opts:
+      - "--exclude=*.bats"
+      # backups/ is a runtime directory created below, not part of the
+      # source tree — without this exclude, --delete wipes every stored
+      # rollback backup (and its checksum) on each re-run of this role.
+      - "--exclude=backups"
+  delegate_to: "{{ inventory_hostname }}"
+  become: no
+
+- name: Set ownership of repair script files
+  file:
+    path: "{{ infra_verify_repairs_dest }}"
+    owner: root
+    group: root
+    recurse: yes
+
+- name: Make repair scripts executable
+  # Explicit loop, not with_fileglob: with_fileglob evaluates on the
+  # control node, not the target host, and /opt/repairs only exists on
+  # the target — a glob here would silently match zero files.
+  file:
+    path: "{{ infra_verify_repairs_dest }}/{{ item }}"
+    mode: '0750'
+  loop:
+    - "service/restart-one-specific-service.sh"
+    - "promtail/validate-promtail-config.sh"
+    - "promtail/restart-promtail.sh"
+    - "prometheus/validate-prometheus-config.sh"
+
+- name: Create repair backup directory (repair-common.sh REPAIR_BACKUP_ROOT default)
+  file:
+    path: "{{ infra_verify_repairs_dest }}/backups"
+    owner: root
+    group: root
+    mode: '0700'
+    state: directory
+
+- name: Create dhanman-ops group
+  group:
+    name: "{{ infra_verify_ops_group }}"
+    state: present
+
+- name: Deploy per-script sudoers entries for repair scripts
+  template:
+    src: sudoers-repair-script.j2
+    dest: "/etc/sudoers.d/dhanman-repairs-{{ item.name }}"
+    owner: root
+    group: root
+    mode: '0440'
+    validate: 'visudo -cf %s'
+  vars:
+    repair_script_path: "{{ infra_verify_repairs_dest }}/{{ item.rel_path }}"
+  loop:
+    - name: "restart-service"
+      rel_path: "service/restart-one-specific-service.sh"
+    - name: "promtail-validate"
+      rel_path: "promtail/validate-promtail-config.sh"
+    - name: "promtail-restart"
+      rel_path: "promtail/restart-promtail.sh"
+    - name: "prometheus-validate"
+      rel_path: "prometheus/validate-prometheus-config.sh"
 
 # ============================================================================
 # Verification
@@ -171,6 +260,32 @@
   failed_when: cron_check.rc != 0
   changed_when: no
 
+- name: Verify repair scripts deployed
+  stat:
+    path: "{{ infra_verify_repairs_dest }}/lib/repair-common.sh"
+  register: repairs_stat
+
+- name: Fail if repair scripts not deployed
+  fail:
+    msg: "Repair script deployment failed; repair-common.sh not found at {{ infra_verify_repairs_dest }}/lib/repair-common.sh"
+  when: not repairs_stat.stat.exists
+
+- name: Verify sudoers entries installed
+  stat:
+    path: "/etc/sudoers.d/dhanman-repairs-{{ item }}"
+  register: sudoers_stat
+  loop:
+    - restart-service
+    - promtail-validate
+    - promtail-restart
+    - prometheus-validate
+
+- name: Fail if any sudoers entry is missing
+  fail:
+    msg: "Sudoers entry missing: /etc/sudoers.d/dhanman-repairs-{{ item.item }}"
+  when: not item.stat.exists
+  loop: "{{ sudoers_stat.results }}"
+
 - name: Log deployment completion
   debug:
     msg: |
@@ -180,3 +295,6 @@
       - Cron: {{ infra_verify_schedule_hour }}:{{ infra_verify_schedule_minute }} daily
       - History: {{ infra_verify_history_dir }}
       - Audit: {{ infra_verify_audit_dir }}
+      - Report recipients: {{ infra_verify_recipients }}
+      - Repair scripts: {{ infra_verify_repairs_dest }} (backups: {{ infra_verify_repairs_dest }}/backups)
+      - Repair sudo access: group {{ infra_verify_ops_group }} (add operators to this group manually)

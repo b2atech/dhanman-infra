@@ -1,0 +1,8 @@
+# Managed by Ansible (infra_verify role) — do not edit manually.
+# Least-privilege grant: members of {{ infra_verify_ops_group }} may run
+# exactly this one repair script as root, with any arguments (the script
+# validates its own arguments before touching anything). This grant does
+# NOT bypass the script's own repair_confirm gate — a human still has to
+# type the confirmation phrase interactively. See
+# operations/policies/agent-infrastructure-policy.md.
+%{{ infra_verify_ops_group }} ALL=(root) NOPASSWD: {{ repair_script_path }}

@@ -271,10 +271,13 @@ run_checks_for_env() {
 
 # ---------------------------------------------------------------------------
 # run_checks — result_init + dispatch per target environment, then
-# report_build/report_render_html written to $HISTORY_DIR. Returns the
-# worst-of exit code across all environments run: 0=HEALTHY, 1=WARNING,
-# 2=CRITICAL (per the master plan's intended mapping, not previously
-# implemented).
+# report_build/report_render_html written to $HISTORY_DIR. If
+# INFRA_VERIFY_RECIPIENTS is set (comma-separated addresses, exported by
+# cron-run.sh.j2 from the infra_verify_recipients Ansible var), also emails
+# the HTML report via report_send_email — best-effort, never fatal to the
+# run. Returns the worst-of exit code across all environments run:
+# 0=HEALTHY, 1=WARNING, 2=CRITICAL (per the master plan's intended
+# mapping, not previously implemented).
 #
 # --service is currently validated against the inventory allowlist
 # (validate_args) but not enforced here — none of the check-family
@@ -319,6 +322,11 @@ print(json.load(open(sys.argv[1])).get('overall_status', 'UNKNOWN'))
 " "$report_file_json")"
 
     log INFO "Report written: ${report_file_json} / ${report_file_html} (overall_status=${env_status})"
+
+    if [[ -n "${INFRA_VERIFY_RECIPIENTS:-}" ]]; then
+      report_send_email "$env" "$env_status" "$report_file_html" "$INFRA_VERIFY_RECIPIENTS" \
+        || log ERROR "report_send_email failed for env=${env} (non-fatal; report is still written to history)"
+    fi
 
     case "$env_status" in
       CRITICAL)

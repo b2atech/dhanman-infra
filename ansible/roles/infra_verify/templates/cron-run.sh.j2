@@ -11,6 +11,10 @@ readonly LOCK_FILE="{{ infra_verify_lock_file }}"
 readonly LOG_TAG="infra-verify-cron[{{ ansible_hostname }}]"
 readonly ENVIRONMENT="{{ inventory_hostname_short }}"  # qa or prod
 
+# Read by run-infra-report.sh -> report_send_email (Phase 10.1). Empty list
+# renders to an empty string, which report_send_email treats as "skip".
+export INFRA_VERIFY_RECIPIENTS="{{ infra_verify_recipients | join(',') }}"
+
 # Log to syslog
 log_info() { echo "{{ infra_verify_log_level }}: $@" | logger -t "$LOG_TAG" -p user.info; }
 log_error() { echo "ERROR: $@" | logger -t "$LOG_TAG" -p user.err; }

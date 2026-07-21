@@ -1,8 +1,9 @@
 #!/usr/bin/env bats
 #
 # test-report.bats — unit tests for lib/report.sh (T6.1 JSON schema/writer,
-# T6.2 HTML rendering, T6.3 redaction tripwire). No SMTP/email code exists
-# yet (T6.4) — nothing here touches network or credentials.
+# T6.2 HTML rendering, T6.3 redaction tripwire, T6.4 email delivery). The
+# T6.4 tests stub msmtp via PATH injection — nothing here touches a real
+# network or real credentials.
 
 setup() {
   ROOT_DIR="$(cd "${BATS_TEST_DIRNAME}/.." && pwd)"
@@ -11,6 +12,9 @@ setup() {
   source "${ROOT_DIR}/lib/result.sh"
   # shellcheck source=../lib/report.sh
   source "${ROOT_DIR}/lib/report.sh"
+
+  STUB_DIR="${BATS_TEST_TMPDIR}/stub"
+  mkdir -p "$STUB_DIR"
 }
 
 teardown() {
@@ -299,4 +303,114 @@ print('OK')
   run report_scan_for_secrets "$rendered_html"
   [ "$status" -eq 0 ]
   [ "$output" = "CLEAN" ]
+}
+
+# ===========================================================================
+# report_send_email — T6.4
+# ===========================================================================
+
+@test "report_send_email: empty recipients_csv is a no-op success" {
+  echo "<html>ok</html>" > "${BATS_TEST_TMPDIR}/report.html"
+
+  run report_send_email "qa" "HEALTHY" "${BATS_TEST_TMPDIR}/report.html" ""
+  [ "$status" -eq 0 ]
+}
+
+@test "report_send_email: missing msmtp binary returns 1" {
+  echo "<html>ok</html>" > "${BATS_TEST_TMPDIR}/report.html"
+
+  # Empty stub dir first (guarantees no msmtp shadows it), plus real
+  # system dirs so date/cat/etc. used elsewhere in the call still work —
+  # this must isolate only the "msmtp is missing" condition, not the
+  # whole PATH.
+  run env PATH="${STUB_DIR}:/usr/bin:/bin" bash -c '
+    source "'"${ROOT_DIR}"'/lib/result.sh"
+    source "'"${ROOT_DIR}"'/lib/report.sh"
+    report_send_email "qa" "HEALTHY" "'"${BATS_TEST_TMPDIR}"'/report.html" "a@example.com"
+  '
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"msmtp not found"* ]]
+}
+
+@test "report_send_email: missing HTML file returns 1" {
+  cat > "${STUB_DIR}/msmtp" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+  chmod +x "${STUB_DIR}/msmtp"
+
+  run env PATH="${STUB_DIR}:${PATH}" bash -c '
+    source "'"${ROOT_DIR}"'/lib/result.sh"
+    source "'"${ROOT_DIR}"'/lib/report.sh"
+    report_send_email "qa" "HEALTHY" "'"${BATS_TEST_TMPDIR}"'/does-not-exist.html" "a@example.com"
+  '
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"HTML report file not found"* ]]
+}
+
+@test "report_send_email: secret in body aborts and never invokes msmtp" {
+  echo "leaked password=hunter2live" > "${BATS_TEST_TMPDIR}/report.html"
+  cat > "${STUB_DIR}/msmtp" <<EOF
+#!/bin/bash
+touch "${BATS_TEST_TMPDIR}/msmtp-was-called"
+exit 0
+EOF
+  chmod +x "${STUB_DIR}/msmtp"
+
+  run env PATH="${STUB_DIR}:${PATH}" bash -c '
+    source "'"${ROOT_DIR}"'/lib/result.sh"
+    source "'"${ROOT_DIR}"'/lib/report.sh"
+    report_send_email "qa" "CRITICAL" "'"${BATS_TEST_TMPDIR}"'/report.html" "a@example.com"
+  '
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"ABORTED"* ]]
+  [ ! -f "${BATS_TEST_TMPDIR}/msmtp-was-called" ]
+}
+
+@test "report_send_email: successful send passes correct headers, body, and recipients to msmtp" {
+  echo "<html><body>all healthy</body></html>" > "${BATS_TEST_TMPDIR}/report.html"
+  cat > "${STUB_DIR}/msmtp" <<EOF
+#!/bin/bash
+echo "ARGS:\$*" > "${BATS_TEST_TMPDIR}/msmtp.args"
+cat > "${BATS_TEST_TMPDIR}/msmtp.stdin"
+exit 0
+EOF
+  chmod +x "${STUB_DIR}/msmtp"
+
+  run env PATH="${STUB_DIR}:${PATH}" bash -c '
+    source "'"${ROOT_DIR}"'/lib/result.sh"
+    source "'"${ROOT_DIR}"'/lib/report.sh"
+    report_send_email "qa" "WARNING" "'"${BATS_TEST_TMPDIR}"'/report.html" "a@example.com,b@example.com"
+  '
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"sent to a@example.com,b@example.com"* ]]
+
+  run cat "${BATS_TEST_TMPDIR}/msmtp.args"
+  [[ "$output" == *"-a default"* ]]
+  [[ "$output" == *"a@example.com"* ]]
+  [[ "$output" == *"b@example.com"* ]]
+
+  run cat "${BATS_TEST_TMPDIR}/msmtp.stdin"
+  [[ "$output" == *"To: a@example.com,b@example.com"* ]]
+  [[ "$output" == *"Subject: DhanMan Infra Report [qa] WARNING"* ]]
+  [[ "$output" == *"Content-Type: text/html; charset=UTF-8"* ]]
+  [[ "$output" == *"<body>all healthy</body>"* ]]
+}
+
+@test "report_send_email: msmtp failure is propagated as a non-zero exit" {
+  echo "<html>ok</html>" > "${BATS_TEST_TMPDIR}/report.html"
+  cat > "${STUB_DIR}/msmtp" <<'EOF'
+#!/bin/bash
+cat >/dev/null
+exit 1
+EOF
+  chmod +x "${STUB_DIR}/msmtp"
+
+  run env PATH="${STUB_DIR}:${PATH}" bash -c '
+    source "'"${ROOT_DIR}"'/lib/result.sh"
+    source "'"${ROOT_DIR}"'/lib/report.sh"
+    report_send_email "qa" "HEALTHY" "'"${BATS_TEST_TMPDIR}"'/report.html" "a@example.com"
+  '
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"msmtp failed"* ]]
 }

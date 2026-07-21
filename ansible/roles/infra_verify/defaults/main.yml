@@ -43,3 +43,18 @@ infra_verify_audit_dir: /var/log/dhanman/infra-audit
 
 # Log level for cron wrapper (DEBUG, INFO, WARNING, ERROR)
 infra_verify_log_level: INFO
+
+# Repair script deployment (Phase 10.6). Kept separate from
+# infra_verify_dest/infra_verify_repo_source: the check engine and the
+# repair scripts are deployed and approved independently, and
+# repair-common.sh's own REPAIR_BACKUP_ROOT default already assumes
+# /opt/repairs/backups.
+infra_verify_repairs_source: "{{ playbook_dir }}/../operations/repairs"
+infra_verify_repairs_dest: /opt/repairs
+
+# Group whose members may sudo to run the approved repair scripts (and
+# nothing else) as root. Deliberately separate from infraverify_group:
+# infraverify is the unprivileged account the automated check engine
+# runs as (Phase 7) and must never gain repair-execution rights — see
+# operations/policies/agent-infrastructure-policy.md.
+infra_verify_ops_group: dhanman-ops

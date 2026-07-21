@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 #
-# report.sh — JSON report schema/writer (T6.1), HTML rendering (T6.2), and
-# a redaction tripwire scanner (T6.3).
+# report.sh — JSON report schema/writer (T6.1), HTML rendering (T6.2), a
+# redaction tripwire scanner (T6.3), and email delivery (T6.4, Phase 10.1).
 # This is a LIBRARY: source it, do not execute it directly.
 #
-# Scope note: this phase builds the renderers only. Nothing in this file
-# sends email or touches SMTP/Brevo credentials — that is T6.4, gated
-# behind separate approval per COO-Infra-Verification-Plan.md section
-# 9.21 ("touches real SMTP creds flow").
+# T6.4 note: report_send_email() is the only function in this file that
+# touches SMTP. It assumes msmtp is already installed and configured via
+# /root/.msmtprc (rendered by the infra_verify Ansible role from Vault
+# credentials, Phase 7). It re-runs the T6.3 tripwire on the outgoing HTML
+# body before sending, as defense in depth on top of report_render_html's
+# own escaping. Email delivery is always best-effort: a send failure is
+# logged but never fails the run or blocks the report from being written
+# to history — see report_send_email's own comment for the rationale.
 #
 # report_build operates on the CURRENT run's $RESULT_FILE (set by
 # result_init, populated by any number of result_add calls from any check
@@ -365,4 +369,80 @@ report_scan_for_secrets() {
 
   printf 'CLEAN'
   return 0
+}
+
+# ---------------------------------------------------------------------------
+# report_send_email <env> <overall_status> <report_html_file> <recipients_csv>
+#
+# T6.4: emails the rendered HTML report via msmtp. Requires msmtp to be
+# installed and /root/.msmtprc already configured (infra_verify Ansible
+# role, Phase 7) — this function only sends, it never touches credentials
+# or SMTP config itself.
+#
+# Runs report_scan_for_secrets on the outgoing body as defense in depth
+# before sending, even though report_render_html already HTML-escapes
+# everything: this is a second, independent gate on the exact bytes about
+# to leave the host, not a re-check of the same escaping pass.
+#
+# Email delivery is always best-effort: recipients_csv empty is not an
+# error (nothing configured yet), and a send failure is logged and
+# returned as a non-zero exit but never treated as fatal by the caller —
+# the report is already written to history by the time this runs, and a
+# broken mail relay must not turn a HEALTHY/WARNING run into a failed one.
+# ---------------------------------------------------------------------------
+report_send_email() {
+  local env="$1"
+  local overall_status="$2"
+  local report_html_file="$3"
+  local recipients_csv="$4"
+
+  if [[ -z "$recipients_csv" ]]; then
+    _result_log INFO "report_send_email: no recipients configured, skipping"
+    return 0
+  fi
+
+  if ! command -v msmtp >/dev/null 2>&1; then
+    _result_log ERROR "report_send_email: msmtp not found, cannot send report email"
+    return 1
+  fi
+
+  if [[ ! -f "$report_html_file" ]]; then
+    _result_log ERROR "report_send_email: HTML report file not found: ${report_html_file}"
+    return 1
+  fi
+
+  local html_body
+  html_body="$(cat -- "$report_html_file")"
+
+  local secret_scan
+  secret_scan="$(report_scan_for_secrets "$html_body")"
+  if [[ "$secret_scan" != CLEAN* ]]; then
+    _result_log ERROR "report_send_email: ABORTED — secret-scan tripwire fired on report body (${secret_scan}); not sending"
+    return 1
+  fi
+
+  local -a recipients=()
+  IFS=',' read -r -a recipients <<< "$recipients_csv"
+
+  if [[ ${#recipients[@]} -eq 0 ]]; then
+    _result_log INFO "report_send_email: recipients_csv parsed to zero addresses, skipping"
+    return 0
+  fi
+
+  local rc=0
+  {
+    printf 'To: %s\n' "$recipients_csv"
+    printf 'Subject: DhanMan Infra Report [%s] %s\n' "$env" "$overall_status"
+    printf 'Content-Type: text/html; charset=UTF-8\n'
+    printf '\n'
+    printf '%s' "$html_body"
+  } | msmtp -a default -- "${recipients[@]}" || rc=$?
+
+  if [[ "$rc" -eq 0 ]]; then
+    _result_log INFO "report_send_email: sent to ${recipients_csv}"
+  else
+    _result_log ERROR "report_send_email: msmtp failed (exit=${rc})"
+  fi
+
+  return "$rc"
 }
