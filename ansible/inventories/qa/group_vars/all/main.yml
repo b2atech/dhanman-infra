@@ -4,6 +4,10 @@ services_base_dir: /var/www/qa
 service_user: www-data
 service_group: www-data
 
+dhanman_ops_members:
+  - bharatmane
+  - pranitbkhamkar
+
 vault_address: https://vault.qa.dgtula.com
 vault_port: 8200
 vault_storage_path: /opt/vault/data
