@@ -10,7 +10,7 @@ infraverify_home: /opt/infra-verify
 infraverify_shell: /usr/sbin/nologin
 
 # Source and destination paths
-infra_verify_repo_source: "{{ playbook_dir }}/../operations/infra-verify"
+infra_verify_repo_source: "{{ playbook_dir }}/../../operations/infra-verify"
 infra_verify_dest: /opt/infra-verify
 
 # SMTP configuration (Vault-sourced in tasks; defaults here for reference)
@@ -49,7 +49,7 @@ infra_verify_log_level: INFO
 # repair scripts are deployed and approved independently, and
 # repair-common.sh's own REPAIR_BACKUP_ROOT default already assumes
 # /opt/repairs/backups.
-infra_verify_repairs_source: "{{ playbook_dir }}/../operations/repairs"
+infra_verify_repairs_source: "{{ playbook_dir }}/../../operations/repairs"
 infra_verify_repairs_dest: /opt/repairs
 
 # Group whose members may sudo to run the approved repair scripts (and

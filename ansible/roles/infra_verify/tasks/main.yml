@@ -44,13 +44,12 @@
   synchronize:
     src: "{{ infra_verify_repo_source }}/"
     dest: "{{ infra_verify_dest }}/"
+    rsync_path: "sudo rsync"
     delete: yes
     rsync_opts:
       - "--exclude=history"
       - "--exclude=.bats"
       - "--exclude=tests"
-  delegate_to: "{{ inventory_hostname }}"
-  become: no
 
 - name: Set ownership of engine files
   file:
@@ -177,6 +176,7 @@
   synchronize:
     src: "{{ infra_verify_repairs_source }}/"
     dest: "{{ infra_verify_repairs_dest }}/"
+    rsync_path: "sudo rsync"
     delete: yes
     rsync_opts:
       - "--exclude=*.bats"
@@ -184,8 +184,6 @@
       # source tree — without this exclude, --delete wipes every stored
       # rollback backup (and its checksum) on each re-run of this role.
       - "--exclude=backups"
-  delegate_to: "{{ inventory_hostname }}"
-  become: no
 
 - name: Set ownership of repair script files
   file:
@@ -219,6 +217,13 @@
   group:
     name: "{{ infra_verify_ops_group }}"
     state: present
+
+- name: Add configured operators to dhanman-ops group
+  user:
+    name: "{{ item }}"
+    groups: "{{ infra_verify_ops_group }}"
+    append: yes
+  loop: "{{ dhanman_ops_members | default([]) }}"
 
 - name: Deploy per-script sudoers entries for repair scripts
   template:
