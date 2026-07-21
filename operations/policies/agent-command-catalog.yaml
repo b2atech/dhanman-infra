@@ -1,0 +1,222 @@
+---
+version: "1.0"
+approval_date: "2026-07-21"
+policy_link: "operations/policies/agent-infrastructure-policy.md"
+
+# Notes on paths used below:
+#   - On a deployed QA/PROD host, reports live at
+#     /opt/infra-verify/history/ (infra_verify_dest/history, per
+#     ansible/roles/infra_verify/defaults/main.yml).
+#   - When testing locally per docs/operations/LOCAL-TEST-GUIDE.md, the
+#     equivalent path is operations/infra-verify/history/ inside a repo
+#     checkout.
+#   - "latest report" means picking the newest report-<env>-*.json by
+#     mtime, not just globbing — a plain glob passed to jq processes
+#     every matching file, not only the most recent one.
+
+read_only_commands:
+  - id: CHECK_QA_SERVICES
+    description: "List all QA services and their current SVC status"
+    implementation: >-
+      jq '.results[] | select(.check_id | startswith("SVC")) |
+      {service: .target, status: .status}'
+      "$(ls -t /opt/infra-verify/history/report-qa-*.json | head -1)"
+    privilege: "read-only"
+
+  - id: CHECK_PROD_SERVICES
+    description: "List all PROD services and their current SVC status"
+    implementation: >-
+      jq '.results[] | select(.check_id | startswith("SVC")) |
+      {service: .target, status: .status}'
+      "$(ls -t /opt/infra-verify/history/report-prod-*.json | head -1)"
+    privilege: "read-only"
+
+  - id: CHECK_QA_LOG_PIPELINE
+    description: >-
+      Check if logs are flowing on QA: file -> Promtail -> Loki ->
+      Grafana
+    implementation: >-
+      jq '.results[] | select(.check_id | startswith("LOG") or
+      (.check_id | startswith("PT")) or (.check_id | startswith("LK")))
+      | {check: .check_id, status: .status, layer: .likely_layer}'
+      "$(ls -t /opt/infra-verify/history/report-qa-*.json | head -1)"
+    privilege: "read-only"
+
+  - id: CHECK_PROD_LOG_PIPELINE
+    description: >-
+      Check if logs are flowing on PROD: file -> Promtail -> Loki ->
+      Grafana
+    implementation: >-
+      jq '.results[] | select(.check_id | startswith("LOG") or
+      (.check_id | startswith("PT")) or (.check_id | startswith("LK")))
+      | {check: .check_id, status: .status, layer: .likely_layer}'
+      "$(ls -t /opt/infra-verify/history/report-prod-*.json | head -1)"
+    privilege: "read-only"
+
+  - id: CHECK_GRAFANA_HEALTH
+    description: "Check if Grafana API is healthy (QA and PROD)"
+    implementation: >-
+      jq '.results[] | select(.check_id | startswith("GF")) |
+      {env: .env, check: .check_id, status: .status}'
+      /opt/infra-verify/history/report-*.json
+    privilege: "read-only"
+
+  - id: READ_LATEST_REPORT_QA
+    description: >-
+      Display the latest QA infra-verify report (executive summary)
+    implementation: >-
+      jq '{env, overall_status, total, healthy, warning, critical, ts}'
+      "$(ls -t /opt/infra-verify/history/report-qa-*.json | head -1)"
+    privilege: "read-only"
+
+  - id: READ_LATEST_REPORT_PROD
+    description: >-
+      Display the latest PROD infra-verify report (executive summary)
+    implementation: >-
+      jq '{env, overall_status, total, healthy, warning, critical, ts}'
+      "$(ls -t /opt/infra-verify/history/report-prod-*.json | head -1)"
+    privilege: "read-only"
+
+  - id: RUN_PROMTAIL_CONFIG_DIAGNOSTIC
+    description: >-
+      Run the read-only Promtail config syntax check. Spawns a
+      throwaway docker container; touches no host state; no
+      repair_confirm gate.
+    implementation: >-
+      bash operations/repairs/promtail/validate-promtail-config.sh
+    privilege: >-
+      read-only (spawns a container, does not mutate the host)
+
+  - id: RUN_PROMETHEUS_CONFIG_DIAGNOSTIC
+    description: >-
+      Run the read-only Prometheus config + rules syntax check via
+      promtool. Spawns a throwaway docker container; touches no host
+      state; no repair_confirm gate.
+    implementation: >-
+      bash operations/repairs/prometheus/validate-prometheus-config.sh
+    privilege: >-
+      read-only (spawns a container, does not mutate the host)
+
+recommendations:
+  - id: RECOMMEND_RESTART_PROMTAIL_QA
+    issue_type: >-
+      PT-01/PT-02, LK-01 CRITICAL (Promtail container down or not
+      sending data)
+    script_name: "operations/repairs/promtail/restart-promtail.sh"
+    scope: >-
+      Restarts the Promtail Docker container only. No config changes.
+    steps: |
+      1. Show current Promtail state: docker inspect promtail
+      2. Operator confirms: "yes" (QA)
+      3. Script runs: docker restart promtail
+      4. Verify: docker inspect promtail (State.Running should be true)
+    verification: "Loki should receive logs again within ~1 minute"
+    escalation: >-
+      If the script exits 3 (postcheck failed, nothing to roll back)
+      or the /ready endpoint never responds, escalate to infra_lead
+
+  - id: RECOMMEND_RESTART_PROMTAIL_PROD
+    issue_type: >-
+      PT-01/PT-02, LK-01 CRITICAL (Promtail container down or not
+      sending data)
+    script_name: "operations/repairs/promtail/restart-promtail.sh"
+    scope: >-
+      Restarts the Promtail Docker container only. No config changes.
+    steps: |
+      1. Show current Promtail state: docker inspect promtail
+      2. Operator confirms exactly: "PROD REPAIR promtail <YYYYMMDD>"
+      3. Script runs: docker restart promtail
+      4. Verify: docker inspect promtail (State.Running should be true)
+    verification: "Loki should receive logs again within ~1 minute"
+    escalation: >-
+      If the script exits 3, escalate to infra_lead immediately — do
+      not retry unilaterally
+
+  - id: RECOMMEND_RESTART_SERVICE_QA
+    issue_type: >-
+      SVC-01/02/03/05, HLT-* CRITICAL (dhanman-*-qa.service unit down
+      or unhealthy)
+    script_name: >-
+      operations/repairs/service/restart-one-specific-service.sh
+    scope: >-
+      Restarts exactly one systemd dhanman-*-qa.service unit named on
+      the command line. The script validates the unit name against
+      ^dhanman-[a-z]+-[a-z]+\.service$ before touching anything; no
+      other service is affected.
+    steps: |
+      1. Identify the exact unit from the report's "target" field
+         (e.g. dhanman-purchase-qa.service)
+      2. Show current state: systemctl show dhanman-purchase-qa.service
+      3. Operator confirms: "yes" (QA)
+      4. Script runs:
+         bash operations/repairs/service/restart-one-specific-service.sh \
+           dhanman-purchase-qa.service
+      5. Verify: systemctl is-active dhanman-purchase-qa.service
+         (should be "active")
+    verification: >-
+      Service should be active and responding on its port within
+      ~30 seconds
+    escalation: >-
+      If the script exits 3 (postcheck failed), escalate to devops —
+      the service may have a startup issue, not just a transient crash
+
+  - id: RECOMMEND_RESTART_SERVICE_PROD
+    issue_type: >-
+      SVC-01/02/03/05, HLT-* CRITICAL (dhanman-*-prod.service unit
+      down or unhealthy)
+    script_name: >-
+      operations/repairs/service/restart-one-specific-service.sh
+    scope: >-
+      Restarts exactly one systemd dhanman-*-prod.service unit named
+      on the command line. The script validates the unit name against
+      ^dhanman-[a-z]+-[a-z]+\.service$ before touching anything; no
+      other service is affected.
+    steps: |
+      1. Identify the exact unit from the report's "target" field
+         (e.g. dhanman-common-prod.service)
+      2. Show current state: systemctl show dhanman-common-prod.service
+      3. Operator confirms exactly:
+         "PROD REPAIR dhanman-common-prod.service <YYYYMMDD>"
+      4. Script runs:
+         bash operations/repairs/service/restart-one-specific-service.sh \
+           dhanman-common-prod.service
+      5. Verify: systemctl is-active dhanman-common-prod.service
+         (should be "active")
+    verification: >-
+      Service should be active and responding on its port within
+      ~30 seconds
+    escalation: >-
+      If the script exits 3, escalate to infra_lead immediately —
+      possible deployment issue, not just a crash
+
+# Check IDs whose repair hint (see each result's "repair" field) points
+# to a script that does not exist yet. Agents must treat every
+# check_id below as "no approved repair available" (policy Escalation
+# Rule 3) and must NOT name these paths to an operator as if they were
+# runnable. Kept in sync with the table in
+# agent-infrastructure-policy.md — update both together.
+unmapped_check_ids:
+  - check_ids: ["LOG-01", "LOG-03", "LOG-04", "LOG-05"]
+    missing_script: >-
+      operations/repairs/permissions/fix-specific-service-log-permissions.sh
+  - check_ids: ["PT-04"]
+    missing_script: >-
+      operations/repairs/promtail/restore-approved-promtail-config.sh
+  - check_ids: ["LK-02"]
+    missing_script: >-
+      operations/repairs/promtail/restore-approved-promtail-config.sh
+  - check_ids: ["PM-01", "PM-02"]
+    missing_script: >-
+      operations/repairs/prometheus/verify-prometheus-target.sh
+
+prohibited_patterns:
+  - "execute.*repair"
+  - "run.*systemctl.*restart"
+  - "docker.*restart"
+  - "bash operations/repairs/.*restart"
+  - "bash operations/repairs/.*\\.sh.*PROD REPAIR"
+  - "modify.*etc"
+  - "chmod.*chown"
+  - "ansible.*playbook"
+  - "git.*push"
+  - "sudo.*-i"
