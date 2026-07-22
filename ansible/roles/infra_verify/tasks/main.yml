@@ -110,9 +110,28 @@
     state: present
 
 - name: Fetch SMTP credentials from Vault
+  # Field names are SMTP_USERNAME/SMTP_PASSWORD (uppercase) in the real
+  # secret/shared/global KV entry — confirmed directly against Vault, not
+  # assumed. auth_method=approle with explicit role_id/secret_id/url is
+  # required: this lookup has no ambient-env-var fallback configured
+  # anywhere, and vault_role_id is also used by dhanman_service/env.j2
+  # for the deployed services' own Vault client, so it's already the
+  # established per-environment variable for this AppRole.
   set_fact:
-    vault_smtp_username: "{{ lookup('hashi_vault', 'secret=secret/shared/global:smtp_username') }}"
-    vault_smtp_password: "{{ lookup('hashi_vault', 'secret=secret/shared/global:smtp_password') }}"
+    vault_smtp_username: >-
+      {{ lookup('hashi_vault',
+        'secret=secret/shared/global:SMTP_USERNAME'
+        ~ ' url=' ~ vault_address
+        ~ ' role_id=' ~ vault_role_id
+        ~ ' secret_id=' ~ vault_secret_id
+        ~ ' auth_method=approle') }}
+    vault_smtp_password: >-
+      {{ lookup('hashi_vault',
+        'secret=secret/shared/global:SMTP_PASSWORD'
+        ~ ' url=' ~ vault_address
+        ~ ' role_id=' ~ vault_role_id
+        ~ ' secret_id=' ~ vault_secret_id
+        ~ ' auth_method=approle') }}
   no_log: yes
 
 - name: Render msmtprc config (SMTP credentials from Vault)
