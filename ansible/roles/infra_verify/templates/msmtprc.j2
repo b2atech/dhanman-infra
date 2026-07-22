@@ -4,7 +4,7 @@
 
 defaults
 auth           on
-tls            {{ infra_verify_smtp_use_tls | lower }}
+tls            {{ 'on' if infra_verify_smtp_use_tls else 'off' }}
 tls_trust_file /etc/ssl/certs/ca-certificates.crt
 logfile        ~/.msmtp.log
 
