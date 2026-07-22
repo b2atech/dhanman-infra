@@ -9,7 +9,7 @@ infra_verify_schedule_minute: "15"
 # NOTE: not yet functional — nothing in operations/infra-verify/lib/report.sh
 # sends email yet (deferred as T6.4); this only prepares config for when it is.
 infra_verify_recipients:
-  - "bharatmane@gmail.com"      # ceo
+  - "bharat.mane@gmail.com"      # ceo
   - "pranitbkhamkar@gmail.com"  # coo
  # - "ops-lead@dhanman.com"      # infra_lead (placeholder — update when assigned)
  # - "devops@dhanman.com"        # devops (placeholder — update when assigned)
