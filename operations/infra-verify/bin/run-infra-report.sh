@@ -349,6 +349,14 @@ print(json.load(open(sys.argv[1])).get('overall_status', 'UNKNOWN'))
 # ---------------------------------------------------------------------------
 # Generic timeout wrapper — backgrounds a command with a watchdog that sends
 # SIGTERM after the given number of seconds.
+#
+# The watchdog subshell closes fd 200 (200>&-): without this it inherits
+# acquire_lock's open lock-file descriptor, and since flock is tied to the
+# fd being open (not to the owning process), the sleep-based watchdog kept
+# the lock held for up to GLOBAL_TIMEOUT seconds after the real run already
+# exited — any manual re-trigger in that window spuriously got "Another
+# infra-verify run is already in progress". Confirmed live on QA: `fuser`
+# showed a bare `sleep` process holding fd 200 well after the run finished.
 # ---------------------------------------------------------------------------
 run_with_timeout() {
   local timeout_secs="$1"
@@ -360,7 +368,7 @@ run_with_timeout() {
   (
     sleep "$timeout_secs"
     kill -TERM "$pid" 2>/dev/null || true
-  ) </dev/null >/dev/null 2>&1 &
+  ) </dev/null >/dev/null 2>&1 200>&- &
   local watchdog_pid=$!
 
   local exit_code=0
