@@ -117,17 +117,22 @@
   # anywhere, and vault_role_id is also used by dhanman_service/env.j2
   # for the deployed services' own Vault client, so it's already the
   # established per-environment variable for this AppRole.
+  # Path is secret/data/shared/global, not secret/shared/global: the
+  # hashi_vault lookup plugin does not do the KV-v2 path translation the
+  # `vault kv` CLI does automatically — confirmed by an isolated test
+  # against real QA Vault (the bare path returns 403 Forbidden even with
+  # valid credentials, since it resolves as a KV-v1-style read).
   set_fact:
     vault_smtp_username: >-
       {{ lookup('hashi_vault',
-        'secret=secret/shared/global:SMTP_USERNAME'
+        'secret=secret/data/shared/global:SMTP_USERNAME'
         ~ ' url=' ~ vault_address
         ~ ' role_id=' ~ vault_role_id
         ~ ' secret_id=' ~ vault_secret_id
         ~ ' auth_method=approle') }}
     vault_smtp_password: >-
       {{ lookup('hashi_vault',
-        'secret=secret/shared/global:SMTP_PASSWORD'
+        'secret=secret/data/shared/global:SMTP_PASSWORD'
         ~ ' url=' ~ vault_address
         ~ ' role_id=' ~ vault_role_id
         ~ ' secret_id=' ~ vault_secret_id
@@ -153,17 +158,21 @@
 # ============================================================================
 
 - name: Render cron wrapper script
+  # No vars: block: infra_verify_dest/lock_file/log_level/recipients are
+  # already role-scoped variables (defaults/main.yml, overridden per
+  # environment). A task-local vars: entry that re-declares a variable
+  # under its own name (e.g. infra_verify_dest: "{{ infra_verify_dest }}")
+  # self-references during evaluation and causes infinite recursion at
+  # runtime — confirmed by an actual failed run against QA
+  # ("recursive loop detected... maximum recursion depth exceeded").
+  # ansible-playbook --syntax-check never catches this since it doesn't
+  # evaluate Jinja2 expressions.
   template:
     src: cron-run.sh.j2
     dest: "{{ infra_verify_dest }}/cron-run.sh"
     owner: root
     group: root
     mode: '0755'
-  vars:
-    infra_verify_dest: "{{ infra_verify_dest }}"
-    infra_verify_lock_file: "{{ infra_verify_lock_file }}"
-    infra_verify_log_level: "{{ infra_verify_log_level }}"
-    infra_verify_recipients: "{{ infra_verify_recipients }}"
 
 - name: Install daily cron job
   cron:
@@ -279,10 +288,21 @@
   when: not engine_stat.stat.exists
 
 - name: Verify cron job installed
-  command: grep "{{ infra_verify_cron_name }}" /etc/cron.d/*
+  # command: never invokes a shell, so /etc/cron.d/* was passed to grep
+  # as a literal, unexpanded string and always failed with "No such file
+  # or directory" regardless of whether the cron job was actually
+  # installed — confirmed by an actual run against QA (the file WAS
+  # present; only this check was broken). The cron module's cron_file
+  # param writes to exactly /etc/cron.d/<cron_file>, so check that path
+  # directly instead of globbing.
+  stat:
+    path: "/etc/cron.d/{{ infra_verify_cron_name }}"
   register: cron_check
-  failed_when: cron_check.rc != 0
-  changed_when: no
+
+- name: Fail if cron job not installed
+  fail:
+    msg: "Cron job not found at /etc/cron.d/{{ infra_verify_cron_name }}"
+  when: not cron_check.stat.exists
 
 - name: Verify repair scripts deployed
   stat:
