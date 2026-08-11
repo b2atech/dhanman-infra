@@ -76,6 +76,11 @@ services:
     port: 5209
     domain: qa.einvoice.dhanman.com
 
+  - name: dhanman-aggregator
+    dll: Dhanman.Aggregator.Api.dll
+    port: 5210
+    domain: qa.aggregator.dgtula.com
+
 ufw_allowed_ports:
   - { port: "22",  proto: tcp, comment: "SSH" }
   - { port: "80",  proto: tcp, comment: "HTTP" }

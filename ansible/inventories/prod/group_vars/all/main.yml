@@ -82,6 +82,11 @@ services:
     port: 5109
     domain: prod.einvoice.dhanman.com
 
+  - name: dhanman-aggregator
+    dll: Dhanman.Aggregator.Api.dll
+    port: 5110
+    domain: prod.aggregator.dhanman.com
+
 ufw_allowed_ports:
   - { port: "22",  proto: tcp, comment: "SSH" }
   - { port: "80",  proto: tcp, comment: "HTTP" }
