@@ -27,6 +27,16 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
+    # Vite-bundled ES module workers (e.g. pdf.js) ship as .mjs, which stock nginx mime.types
+    # doesn't map -- it falls through to default_type (application/octet-stream) and browsers
+    # refuse to execute module scripts served with a non-JS content type. Matched before the
+    # generic static-asset block below since nginx picks the first matching regex location.
+    location ~* \.mjs$ {
+        default_type application/javascript;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
     # Cache static assets
     location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff2?|ttf|eot)$ {
         expires 1y;
