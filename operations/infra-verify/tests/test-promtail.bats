@@ -17,7 +17,8 @@ setup() {
   TEST_TMP="$(mktemp -d)"
 
   unset MOCK_DOCKER_STATUS MOCK_DOCKER_RESTARTCOUNT MOCK_DOCKER_STARTEDAT
-  unset MOCK_DOCKER_READY MOCK_DOCKER_POSITIONS_MTIME MOCK_DOCKER_LOGS
+  unset MOCK_DOCKER_IP MOCK_PROMTAIL_READY_BODY MOCK_CURL_FAIL
+  unset MOCK_DOCKER_POSITIONS_MTIME MOCK_DOCKER_LOGS
 }
 
 teardown() {
@@ -72,7 +73,8 @@ teardown() {
 # ---------------------------------------------------------------------------
 @test "PT-02: ready response yields HEALTHY" {
   result_init "test-p4" "qa"
-  export MOCK_DOCKER_READY="Ready"
+  export MOCK_DOCKER_IP="172.18.0.2"
+  export MOCK_PROMTAIL_READY_BODY="Ready"
 
   run pt_check_02_readiness "HEALTHY"
   [ "$status" -eq 0 ]
@@ -84,7 +86,8 @@ teardown() {
 # ---------------------------------------------------------------------------
 @test "PT-02: not ready yields CRITICAL" {
   result_init "test-p5" "qa"
-  export MOCK_DOCKER_READY=""
+  export MOCK_DOCKER_IP="172.18.0.2"
+  export MOCK_PROMTAIL_READY_BODY=""
 
   run pt_check_02_readiness "HEALTHY"
   [ "$status" -eq 0 ]
@@ -100,6 +103,40 @@ teardown() {
   run pt_check_02_readiness "CRITICAL"
   [ "$status" -eq 0 ]
   [ "$output" = "NOT_APPLICABLE" ]
+}
+
+# ---------------------------------------------------------------------------
+# Test 6b
+# ---------------------------------------------------------------------------
+@test "PT-02: missing container IP yields CRITICAL" {
+  result_init "test-p6b" "qa"
+  export MOCK_DOCKER_IP=""
+
+  run pt_check_02_readiness "HEALTHY"
+  [ "$status" -eq 0 ]
+  [ "$output" = "CRITICAL" ]
+
+  run python3 -c "
+import json, sys
+obj = json.loads(sys.argv[1])
+assert 'could not determine promtail container IP' in obj['evidence']
+print('OK')
+" "$(cat "$RESULT_FILE")"
+  [ "$status" -eq 0 ]
+  [ "$output" = "OK" ]
+}
+
+# ---------------------------------------------------------------------------
+# Test 6c
+# ---------------------------------------------------------------------------
+@test "PT-02: curl connection failure yields CRITICAL" {
+  result_init "test-p6c" "qa"
+  export MOCK_DOCKER_IP="172.18.0.2"
+  export MOCK_CURL_FAIL="1"
+
+  run pt_check_02_readiness "HEALTHY"
+  [ "$status" -eq 0 ]
+  [ "$output" = "CRITICAL" ]
 }
 
 # ---------------------------------------------------------------------------
@@ -292,7 +329,8 @@ print('OK')
   result_init "test-p17" "qa"
   export MOCK_DOCKER_STATUS="running"
   export MOCK_DOCKER_RESTARTCOUNT="0"
-  export MOCK_DOCKER_READY="Ready"
+  export MOCK_DOCKER_IP="172.18.0.2"
+  export MOCK_PROMTAIL_READY_BODY="Ready"
   export MOCK_DOCKER_POSITIONS_MTIME
   MOCK_DOCKER_POSITIONS_MTIME="$(date +%s)"
   export MOCK_DOCKER_LOGS=""
@@ -321,7 +359,8 @@ EOF
   result_init "test-p18" "qa"
   export MOCK_DOCKER_STATUS="running"
   export MOCK_DOCKER_RESTARTCOUNT="0"
-  export MOCK_DOCKER_READY="Ready"
+  export MOCK_DOCKER_IP="172.18.0.2"
+  export MOCK_PROMTAIL_READY_BODY="Ready"
   export MOCK_DOCKER_POSITIONS_MTIME
   MOCK_DOCKER_POSITIONS_MTIME="$(date +%s)"
   export MOCK_DOCKER_LOGS="error sending batch"

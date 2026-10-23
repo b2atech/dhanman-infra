@@ -3,9 +3,10 @@
 # promtail.sh — PT family checks (Promtail verification).
 # This is a LIBRARY: source it, do not execute it directly.
 #
-# PT-01 container state        PT-02 readiness (docker exec, per the
-# discovery.md-confirmed decision — port 9080 is not published to the
-# host, so a host-level curl cannot reach it)
+# PT-01 container state        PT-02 readiness (container has no wget/curl,
+# so readiness is checked via host-side curl against the container's IP,
+# discovered with `docker inspect`; port 9080 is not published to the host
+# but is reachable via the bridge-network IP)
 # PT-03 config file exists      PT-04 config-path-vs-real-files cross-check
 # PT-05 positions file freshness (ephemeral /tmp/positions.yaml — ships
 # no volume, so every restart wipes it; see discovery.md §4)
@@ -149,9 +150,11 @@ pt_check_01_container_state() {
 }
 
 # ---------------------------------------------------------------------------
-# PT-02: readiness endpoint. Port 9080 is not published to the host
-# (confirmed discovery.md finding), so this must go through docker exec,
-# not a host-level curl — matches the recorded PT-02 decision.
+# PT-02: readiness endpoint. The Promtail image has no wget/curl inside the
+# container, so readiness is checked from the host instead: discover the
+# container's IP on its Docker network via `docker inspect`, then curl
+# http://<ip>:9080/ready directly (port 9080 is not published to the host,
+# but it is reachable from the host over the bridge network's IP).
 # ---------------------------------------------------------------------------
 pt_check_02_readiness() {
   local pt01_status="$1"
@@ -162,18 +165,32 @@ pt_check_02_readiness() {
     return 0
   fi
 
-  local ready_out
-  ready_out="$(timeout "$_PT_READY_TIMEOUT_SECONDS" docker exec "$_PT_CONTAINER_NAME" wget -qO- 127.0.0.1:9080/ready 2>/dev/null || true)"
+  local container_ip
+  container_ip="$(docker inspect "$_PT_CONTAINER_NAME" --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' 2>/dev/null || true)"
+  container_ip="$(printf '%s' "$container_ip" | xargs || true)"
 
   local status evidence layer repair
+  if [[ -z "$container_ip" ]]; then
+    status="CRITICAL"
+    evidence="could not determine promtail container IP via docker inspect — cannot reach readiness endpoint"
+    layer="promtail-process"
+    repair="$_PT_RESTART_REPAIR"
+    result_add "PT-02" "promtail" "$status" "$evidence" "$layer" "$repair"
+    printf '%s' "$status"
+    return 0
+  fi
+
+  local ready_out
+  ready_out="$(timeout "$_PT_READY_TIMEOUT_SECONDS" curl -s "http://${container_ip}:9080/ready" 2>/dev/null || true)"
+
   if [[ "$ready_out" == *"Ready"* ]]; then
     status="HEALTHY"
-    evidence="readiness endpoint responded: ${ready_out}"
+    evidence="readiness endpoint (http://${container_ip}:9080/ready) responded: ${ready_out}"
     layer="none"
     repair="none"
   else
     status="CRITICAL"
-    evidence="readiness endpoint did not respond with Ready (got: '${ready_out}')"
+    evidence="readiness endpoint (http://${container_ip}:9080/ready) did not respond with Ready (got: '${ready_out}')"
     layer="promtail-process"
     repair="$_PT_RESTART_REPAIR"
   fi

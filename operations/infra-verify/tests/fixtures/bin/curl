@@ -45,6 +45,8 @@
 #   MOCK_CURL_FAIL        (if set to any non-empty value: simulates a total
 #                          connection failure — http_code forced to "000",
 #                          time_total to "0.000", body ignored, exit 7)
+#   MOCK_PROMTAIL_READY_BODY (PT-02 only, URL contains ":9080/ready",
+#                          default: "Ready")
 set -euo pipefail
 
 http_code="${MOCK_PROM_HTTP_CODE:-${MOCK_LOKI_HTTP_CODE:-${MOCK_CURL_HTTP_CODE:-200}}}"
@@ -102,6 +104,10 @@ elif [[ "$url_arg" == *"/api/ds/query"* ]]; then
   else
     body="${MOCK_GRAFANA_QUERY_PROM_BODY-${body}}"
     [[ -n "${MOCK_GRAFANA_QUERY_PROM_HTTP_CODE:-}" ]] && http_code="$MOCK_GRAFANA_QUERY_PROM_HTTP_CODE"
+  fi
+elif [[ "$url_arg" == *":9080/ready"* ]]; then
+  if [[ -z "${MOCK_CURL_FAIL:-}" ]]; then
+    body="${MOCK_PROMTAIL_READY_BODY-Ready}"
   fi
 elif [[ "$url_arg" == *"/ready"* ]]; then
   body="${MOCK_PROM_READY_BODY-${MOCK_LOKI_READY_BODY-ready}}"
