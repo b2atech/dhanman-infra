@@ -1,3 +1,5 @@
+> **Superseded** — see [docs/observability/opentelemetry-rollout.md](observability/opentelemetry-rollout.md) for the current plan and status.
+
 # OpenTelemetry — .NET Service Changes
 
 Each of the 9 .NET services needs these changes to emit traces to Grafana Tempo.

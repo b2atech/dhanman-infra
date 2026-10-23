@@ -1,0 +1,10 @@
+# Mounted at /etc/grafana/provisioning/dashboards/dhanman.yaml
+apiVersion: 1
+providers:
+  - name: dhanman
+    folder: Dhanman
+    type: file
+    allowUiUpdates: false
+    updateIntervalSeconds: 60
+    options:
+      path: /etc/grafana/dashboards/dhanman

@@ -1,3 +1,5 @@
+> **Superseded** — see [docs/observability/opentelemetry-rollout.md](observability/opentelemetry-rollout.md) for the current plan and status.
+
 # OpenTelemetry — Server Setup (Grafana Tempo)
 
 This documents what to run on dm-prd-n (57.129.74.139) to receive and store traces from .NET services.

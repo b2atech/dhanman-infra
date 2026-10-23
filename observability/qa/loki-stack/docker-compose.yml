@@ -1,0 +1,76 @@
+# Deployed to dm-qa:/home/ubuntu/loki-stack/docker-compose.yml
+services:
+  loki:
+    image: grafana/loki:latest
+    container_name: loki-stack-loki-1
+    user: root
+    restart: always
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./loki:/etc/loki
+      - ./loki/chunks:/tmp/loki/chunks
+      - ./loki/index:/tmp/loki/index
+      - ./loki/cache:/tmp/loki/cache
+      - ./loki/compactor:/tmp/loki/compactor
+      - ./loki/wal:/wal
+      - ./loki/tsdb-shipper-cache:/tmp/loki/tsdb-shipper-cache
+
+  promtail:
+    image: grafana/promtail:2.9.0
+    container_name: promtail
+    restart: always
+    depends_on:
+      - loki
+    command: -config.file=/etc/promtail/config.yaml
+    volumes:
+      - ./promtail-config.yaml:/etc/promtail/config.yaml
+      - ./promtail:/promtail
+      - /var/www/qa:/var/www/qa
+      - /var/log/journal:/var/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro
+
+  tempo:
+    image: grafana/tempo:2.8.2
+    container_name: tempo
+    restart: always
+    user: "10001:10001"
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    ports:
+      - "127.0.0.1:3200:3200"
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+    volumes:
+      - ./tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - ./tempo/data:/var/tempo
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: loki-stack-grafana-1
+    restart: always
+    depends_on:
+      - loki
+      - tempo
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SERVER_ROOT_URL: "https://qa.logs.dgtula.com"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "false"
+      GF_SERVER_HTTP_PORT: "3000"
+      GF_SECURITY_ALLOW_EMBEDDING: "true"
+    volumes:
+      - grafana-storage:/var/lib/grafana
+      - ./grafana-provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana-provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana-dashboards:/etc/grafana/dashboards/dhanman:ro
+
+volumes:
+  grafana-storage:
+    external: true
+    name: loki-stack_grafana-storage
