@@ -29,52 +29,52 @@ services:
   - name: dhanman-common
     dll: Dhanman.Common.Api.dll
     port: 5200
-    domain: qa.common.dhanman.com
+    domain: qa.common.dgtula.com
 
   - name: dhanman-community
     dll: Dhanman.MyHome.Api.dll
     port: 5205
-    domain: qa.community.dhanman.com
+    domain: qa.community.dgtula.com
 
   - name: dhanman-inventory
     dll: Dhanman.Inventory.Api.dll
     port: 5204
-    domain: qa.inventory.dhanman.com
+    domain: qa.inventory.dgtula.com
 
   - name: dhanman-payroll
     dll: Dhanman.Payroll.Api.dll
     port: 5203
-    domain: qa.payroll.dhanman.com
+    domain: qa.payroll.dgtula.com
 
   - name: dhanman-purchase
     dll: Dhanman.Purchase.Api.dll
     port: 5202
-    domain: qa.purchase.dhanman.com
+    domain: qa.purchase.dgtula.com
 
   - name: dhanman-sales
     dll: Dhanman.Sales.Api.dll
     port: 5201
-    domain: qa.sales.dhanman.com
+    domain: qa.sales.dgtula.com
 
   - name: dhanman-payment
     dll: Dhanman.Payment.Api.dll
     port: 5206
-    domain: qa.payment.dhanman.com
+    domain: qa.payment.dgtula.com
 
   - name: dhanman-document
     dll: Dhanman.Document.dll
     port: 5207
-    domain: qa.document.dhanman.com
+    domain: qa.document.dgtula.com
 
   - name: dhanman-agent
     dll: Dhanman.Agent.API.dll
     port: 5208
-    domain: qa.agent.dhanman.com
+    domain: qa.agent.dgtula.com
 
   - name: dhanman-einvoice
     dll: Dhanman.EInvoice.Api.dll
     port: 5209
-    domain: qa.einvoice.dhanman.com
+    domain: qa.einvoice.dgtula.com
 
   - name: dhanman-aggregator
     dll: Dhanman.Aggregator.Api.dll
@@ -86,7 +86,7 @@ ufw_allowed_ports:
   - { port: "80",  proto: tcp, comment: "HTTP" }
   - { port: "443", proto: tcp, comment: "HTTPS" }
 
-domain: dhanman.com
+domain: dgtula.com
 
 rabbitmq_data_dir: /opt/rabbitmq
 rabbitmq_user: dhanman

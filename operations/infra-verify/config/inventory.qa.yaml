@@ -6,7 +6,7 @@ services:
   - name: dhanman-common
     environment: qa
     port: 5200
-    domain: qa.common.dhanman.com
+    domain: qa.common.dgtula.com
     has_metrics: true
     systemd_unit: dhanman-common-qa.service
     internal_url: http://127.0.0.1:5200
@@ -25,7 +25,7 @@ services:
   - name: dhanman-community
     environment: qa
     port: 5205
-    domain: qa.community.dhanman.com
+    domain: qa.community.dgtula.com
     has_metrics: true
     systemd_unit: dhanman-community-qa.service
     internal_url: http://127.0.0.1:5205
@@ -44,7 +44,7 @@ services:
   - name: dhanman-inventory
     environment: qa
     port: 5204
-    domain: qa.inventory.dhanman.com
+    domain: qa.inventory.dgtula.com
     has_metrics: true
     systemd_unit: dhanman-inventory-qa.service
     internal_url: http://127.0.0.1:5204
@@ -63,7 +63,7 @@ services:
   - name: dhanman-payroll
     environment: qa
     port: 5203
-    domain: qa.payroll.dhanman.com
+    domain: qa.payroll.dgtula.com
     has_metrics: true
     systemd_unit: dhanman-payroll-qa.service
     internal_url: http://127.0.0.1:5203
@@ -82,7 +82,7 @@ services:
   - name: dhanman-purchase
     environment: qa
     port: 5202
-    domain: qa.purchase.dhanman.com
+    domain: qa.purchase.dgtula.com
     has_metrics: true
     systemd_unit: dhanman-purchase-qa.service
     internal_url: http://127.0.0.1:5202
@@ -101,7 +101,7 @@ services:
   - name: dhanman-sales
     environment: qa
     port: 5201
-    domain: qa.sales.dhanman.com
+    domain: qa.sales.dgtula.com
     has_metrics: true
     systemd_unit: dhanman-sales-qa.service
     internal_url: http://127.0.0.1:5201
@@ -120,7 +120,7 @@ services:
   - name: dhanman-payment
     environment: qa
     port: 5206
-    domain: qa.payment.dhanman.com
+    domain: qa.payment.dgtula.com
     has_metrics: true
     systemd_unit: dhanman-payment-qa.service
     internal_url: http://127.0.0.1:5206
@@ -139,7 +139,7 @@ services:
   - name: dhanman-document
     environment: qa
     port: 5207
-    domain: qa.document.dhanman.com
+    domain: qa.document.dgtula.com
     has_metrics: true
     systemd_unit: dhanman-document-qa.service
     internal_url: http://127.0.0.1:5207
@@ -158,7 +158,7 @@ services:
   - name: dhanman-agent
     environment: qa
     port: 5208
-    domain: qa.agent.dhanman.com
+    domain: qa.agent.dgtula.com
     has_metrics: true
     systemd_unit: dhanman-agent-qa.service
     internal_url: http://127.0.0.1:5208
@@ -177,7 +177,7 @@ services:
   - name: dhanman-einvoice
     environment: qa
     port: 5209
-    domain: qa.einvoice.dhanman.com
+    domain: qa.einvoice.dgtula.com
     has_metrics: true
     systemd_unit: dhanman-einvoice-qa.service
     internal_url: http://127.0.0.1:5209

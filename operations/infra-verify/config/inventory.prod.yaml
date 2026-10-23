@@ -6,7 +6,7 @@ services:
   - name: dhanman-common
     environment: prod
     port: 5100
-    domain: prod.common.dhanman.com
+    domain: prod.common.dgtula.com
     has_metrics: true
     systemd_unit: dhanman-common-prod.service
     internal_url: http://127.0.0.1:5100
@@ -25,7 +25,7 @@ services:
   - name: dhanman-community
     environment: prod
     port: 5101
-    domain: prod.community.dhanman.com
+    domain: prod.community.dgtula.com
     has_metrics: true
     systemd_unit: dhanman-community-prod.service
     internal_url: http://127.0.0.1:5101
@@ -44,7 +44,7 @@ services:
   - name: dhanman-inventory
     environment: prod
     port: 5102
-    domain: prod.inventory.dhanman.com
+    domain: prod.inventory.dgtula.com
     has_metrics: true
     systemd_unit: dhanman-inventory-prod.service
     internal_url: http://127.0.0.1:5102
@@ -63,7 +63,7 @@ services:
   - name: dhanman-payroll
     environment: prod
     port: 5103
-    domain: prod.payroll.dhanman.com
+    domain: prod.payroll.dgtula.com
     has_metrics: true
     systemd_unit: dhanman-payroll-prod.service
     internal_url: http://127.0.0.1:5103
@@ -82,7 +82,7 @@ services:
   - name: dhanman-purchase
     environment: prod
     port: 5104
-    domain: prod.purchase.dhanman.com
+    domain: prod.purchase.dgtula.com
     has_metrics: true
     systemd_unit: dhanman-purchase-prod.service
     internal_url: http://127.0.0.1:5104
@@ -101,7 +101,7 @@ services:
   - name: dhanman-sales
     environment: prod
     port: 5105
-    domain: prod.sales.dhanman.com
+    domain: prod.sales.dgtula.com
     has_metrics: true
     systemd_unit: dhanman-sales-prod.service
     internal_url: http://127.0.0.1:5105
@@ -120,7 +120,7 @@ services:
   - name: dhanman-payment
     environment: prod
     port: 5106
-    domain: payment.dhanman.com
+    domain: payment.dgtula.com
     has_metrics: true
     systemd_unit: dhanman-payment-prod.service
     internal_url: http://127.0.0.1:5106
@@ -139,7 +139,7 @@ services:
   - name: dhanman-document
     environment: prod
     port: 5107
-    domain: prod.document.dhanman.com
+    domain: prod.document.dgtula.com
     has_metrics: true
     systemd_unit: dhanman-document-prod.service
     internal_url: http://127.0.0.1:5107
@@ -158,7 +158,7 @@ services:
   - name: dhanman-agent
     environment: prod
     port: 5108
-    domain: prod.agent.dhanman.com
+    domain: prod.agent.dgtula.com
     has_metrics: false
     systemd_unit: dhanman-agent-prod.service
     internal_url: http://127.0.0.1:5108
@@ -177,7 +177,7 @@ services:
   - name: dhanman-einvoice
     environment: prod
     port: 5109
-    domain: prod.einvoice.dhanman.com
+    domain: prod.einvoice.dgtula.com
     has_metrics: true
     systemd_unit: dhanman-einvoice-prod.service
     internal_url: http://127.0.0.1:5109
