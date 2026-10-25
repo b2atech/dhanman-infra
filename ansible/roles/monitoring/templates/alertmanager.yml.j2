@@ -1,7 +1,7 @@
 global:
-  smtp_smarthost: "smtp-relay.brevo.com:587"
-  smtp_from: "alerts@dhanman.com"
-  smtp_auth_username: "{{ smtp_username | default('8ba6c9001@smtp-brevo.com') }}"
+  smtp_smarthost: "smtp-relay.gmail.com:587"
+  smtp_from: "alerts@dgtula.com"
+  smtp_auth_username: "{{ smtp_username | default('system@dgtula.com') }}"
   smtp_auth_password: "{{ smtp_password | default('') }}"
   smtp_require_tls: true
   resolve_timeout: 5m
@@ -25,21 +25,21 @@ route:
 receivers:
   - name: default
     email_configs:
-      - to: "{{ alert_emails | default('devops@dhanman.com') }}"
+      - to: "{{ alert_emails | default('admin@dgtula.com') }}"
         send_resolved: true
         headers:
           Subject: '[{{ "{{" }} .Status | toUpper {{ "}}" }}] {{ "{{" }} .GroupLabels.alertname {{ "}}" }} ({{ "{{" }} .GroupLabels.env {{ "}}" }})'
 
   - name: high
     email_configs:
-      - to: "{{ alert_emails | default('devops@dhanman.com') }}"
+      - to: "{{ alert_emails | default('admin@dgtula.com') }}"
         send_resolved: true
         headers:
           Subject: '⚠️ [{{ "{{" }} .Status | toUpper {{ "}}" }}] {{ "{{" }} .GroupLabels.alertname {{ "}}" }} ({{ "{{" }} .GroupLabels.env {{ "}}" }})'
 
   - name: critical
     email_configs:
-      - to: "{{ alert_emails | default('devops@dhanman.com') }}"
+      - to: "{{ alert_emails | default('admin@dgtula.com') }}"
         send_resolved: true
         headers:
           Subject: '🔴 CRITICAL [{{ "{{" }} .Status | toUpper {{ "}}" }}] {{ "{{" }} .GroupLabels.alertname {{ "}}" }} ({{ "{{" }} .GroupLabels.env {{ "}}" }})'

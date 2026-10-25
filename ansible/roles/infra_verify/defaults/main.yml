@@ -14,9 +14,9 @@ infra_verify_repo_source: "{{ playbook_dir }}/../../operations/infra-verify"
 infra_verify_dest: /opt/infra-verify
 
 # SMTP configuration (Vault-sourced in tasks; defaults here for reference)
-smtp_host: smtp-relay.brevo.com
+smtp_host: smtp-relay.gmail.com
 smtp_port: 587
-smtp_from: infra-report@dhanman.com
+smtp_from: infra-report@dgtula.com
 smtp_use_tls: yes
 
 # Daily schedule (cron, 24-hour format, timezone IST)
