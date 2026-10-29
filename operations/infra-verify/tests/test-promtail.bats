@@ -18,7 +18,7 @@ setup() {
 
   unset MOCK_DOCKER_STATUS MOCK_DOCKER_RESTARTCOUNT MOCK_DOCKER_STARTEDAT
   unset MOCK_DOCKER_IP MOCK_PROMTAIL_READY_BODY MOCK_CURL_FAIL
-  unset MOCK_DOCKER_POSITIONS_MTIME MOCK_DOCKER_LOGS
+  unset MOCK_DOCKER_POSITIONS_MTIME MOCK_DOCKER_LOGS MOCK_DOCKER_INSPECT_FAIL
 }
 
 teardown() {
@@ -66,6 +66,51 @@ teardown() {
   run pt_check_01_container_state
   [ "$status" -eq 0 ]
   [ "$output" = "CRITICAL" ]
+}
+
+# ---------------------------------------------------------------------------
+# Test 3b
+# ---------------------------------------------------------------------------
+@test "PT-01: docker inspect itself failing yields CRITICAL with 'docker inspect failed' evidence" {
+  result_init "test-p3b" "qa"
+  export MOCK_DOCKER_INSPECT_FAIL="1"
+
+  run pt_check_01_container_state
+  [ "$status" -eq 0 ]
+  [ "$output" = "CRITICAL" ]
+
+  run python3 -c "
+import json, sys
+obj = json.loads(sys.argv[1])
+assert obj['status'] == 'CRITICAL'
+assert 'docker inspect failed' in obj['evidence'], obj['evidence']
+print('OK')
+" "$(cat "$RESULT_FILE")"
+  [ "$status" -eq 0 ]
+  [ "$output" = "OK" ]
+}
+
+# ---------------------------------------------------------------------------
+# Test 3c
+# ---------------------------------------------------------------------------
+@test "PT-01: unparseable RestartCount yields CRITICAL, not a silent 0" {
+  result_init "test-p3c" "qa"
+  export MOCK_DOCKER_STATUS="running"
+  export MOCK_DOCKER_RESTARTCOUNT="N/A"
+
+  run pt_check_01_container_state
+  [ "$status" -eq 0 ]
+  [ "$output" = "CRITICAL" ]
+
+  run python3 -c "
+import json, sys
+obj = json.loads(sys.argv[1])
+assert obj['status'] == 'CRITICAL'
+assert 'unparseable' in obj['evidence'], obj['evidence']
+print('OK')
+" "$(cat "$RESULT_FILE")"
+  [ "$status" -eq 0 ]
+  [ "$output" = "OK" ]
 }
 
 # ---------------------------------------------------------------------------
@@ -165,6 +210,31 @@ print('OK')
 }
 
 # ---------------------------------------------------------------------------
+# Test 8b
+# ---------------------------------------------------------------------------
+@test "PT-03: config file exists but unreadable yields CRITICAL" {
+  result_init "test-p8b" "qa"
+  local f="${TEST_TMP}/unreadable-config.yml"
+  echo "server: {}" > "$f"
+  chmod 000 "$f"
+
+  run pt_check_03_config_exists "$f"
+  chmod 644 "$f"
+  [ "$status" -eq 0 ]
+  [ "$output" = "CRITICAL" ]
+
+  run python3 -c "
+import json, sys
+obj = json.loads(sys.argv[1])
+assert obj['status'] == 'CRITICAL'
+assert 'missing or unreadable' in obj['evidence'], obj['evidence']
+print('OK')
+" "$(cat "$RESULT_FILE")"
+  [ "$status" -eq 0 ]
+  [ "$output" = "OK" ]
+}
+
+# ---------------------------------------------------------------------------
 # Test 9
 # ---------------------------------------------------------------------------
 @test "PT-04: glob matches real files yields HEALTHY" {
@@ -217,6 +287,81 @@ assert obj['status'] == 'WARNING'
 assert '${logdir}/dhanman-*.log' in obj['evidence']
 print('OK')
 " "$(cat "$RESULT_FILE")"
+  [ "$status" -eq 0 ]
+  [ "$output" = "OK" ]
+}
+
+# ---------------------------------------------------------------------------
+# Test 10b
+# ---------------------------------------------------------------------------
+@test "PT-04: config file unreadable yields CRITICAL, cannot extract glob" {
+  result_init "test-p10b" "qa"
+  local cfg="${TEST_TMP}/unreadable-config10b.yml"
+  echo "server: {}" > "$cfg"
+  chmod 000 "$cfg"
+
+  run pt_check_04_path_cross_check "$cfg"
+  chmod 644 "$cfg"
+  [ "$status" -eq 0 ]
+  [ "$output" = "CRITICAL" ]
+
+  run python3 -c "
+import json, sys
+obj = json.loads(sys.argv[1])
+assert obj['status'] == 'CRITICAL'
+assert 'unreadable' in obj['evidence'], obj['evidence']
+print('OK')
+" "$(cat "$RESULT_FILE")"
+  [ "$status" -eq 0 ]
+  [ "$output" = "OK" ]
+}
+
+# ---------------------------------------------------------------------------
+# Test 10c
+# ---------------------------------------------------------------------------
+@test "run_pt_checks: resolves promtail_config_path from inventory.qa.yaml, not the hardcoded default" {
+  result_init "test-p10c" "qa"
+
+  run run_pt_checks "qa"
+  [ "$status" -eq 0 ]
+
+  run python3 -c "
+import json, sys
+found = False
+with open(sys.argv[1]) as f:
+    for line in f:
+        r = json.loads(line)
+        if r.get('check_id') == 'PT-03':
+            assert '/home/ubuntu/loki-stack/promtail-config.yaml' in r['evidence'], r['evidence']
+            found = True
+assert found
+print('OK')
+" "$RESULT_FILE"
+  [ "$status" -eq 0 ]
+  [ "$output" = "OK" ]
+}
+
+# ---------------------------------------------------------------------------
+# Test 10d
+# ---------------------------------------------------------------------------
+@test "run_pt_checks: falls back to _PT_DEFAULT_CONFIG_PATH when no inventory file exists for the env" {
+  result_init "test-p10d" "qa"
+
+  run run_pt_checks "no-such-env-xyz"
+  [ "$status" -eq 0 ]
+
+  run python3 -c "
+import json, sys
+found = False
+with open(sys.argv[1]) as f:
+    for line in f:
+        r = json.loads(line)
+        if r.get('check_id') == 'PT-03':
+            assert '/opt/monitoring/promtail/promtail-config.yml' in r['evidence'], r['evidence']
+            found = True
+assert found
+print('OK')
+" "$RESULT_FILE"
   [ "$status" -eq 0 ]
   [ "$output" = "OK" ]
 }

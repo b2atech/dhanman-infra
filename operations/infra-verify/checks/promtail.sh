@@ -14,7 +14,11 @@
 #
 # Confirmed facts from discovery.md, used directly:
 #   Container name: promtail
-#   Config file on host: /opt/monitoring/promtail/promtail-config.yml
+#   Config file on host: /opt/monitoring/promtail/promtail-config.yml on
+#     prod (unverified live, preserved as the default); QA's real config
+#     lives at /home/ubuntu/loki-stack/promtail-config.yaml instead — see
+#     environment.promtail_config_path in inventory.<env>.yaml, generated
+#     by promtail_config_path_for in generate-inventory.sh.
 #   Positions file inside container: /tmp/positions.yaml
 #   Listen port inside container: 9080 (NOT published to host)
 #   Push target: http://loki:3100/loki/api/v1/push
@@ -115,22 +119,61 @@ _pt_worse_status() {
 }
 
 # ---------------------------------------------------------------------------
-# PT-01: container state
+# PT-01: container state.
+#
+# Inspect format uses {{.RestartCount}}, not {{.State.RestartCount}} —
+# RestartCount is a top-level docker-inspect field, not nested under
+# .State. The nested path isn't just wrong data: on the Docker version
+# running on QA it's a hard template-parsing error (exit != 0, no stdout),
+# which the previous `2>/dev/null || true` swallowed — turning a real
+# "docker inspect is broken" condition into silent empty output that read
+# as container_status="" and fell through to a misleading CRITICAL
+# "status=unknown" even though promtail was actually running fine.
+#
+# stderr is merged into inspect_out (2>&1) instead of discarded, and the
+# exit code is captured explicitly (no `|| true`), so a failed invocation
+# is detected and reported as "docker inspect failed", distinct from a
+# successful inspect that legitimately reports the container not running.
+# RestartCount is also validated as purely numeric before use — any other
+# docker-inspect output shape is reported as unparseable rather than
+# silently defaulting to a RestartCount of 0 indistinguishable from a
+# genuinely healthy container.
 # ---------------------------------------------------------------------------
 pt_check_01_container_state() {
-  local inspect_out
-  inspect_out="$(docker inspect "$_PT_CONTAINER_NAME" --format '{{.State.Status}} {{.State.RestartCount}} {{.State.StartedAt}}' 2>/dev/null || true)"
+  local inspect_out inspect_rc
+  inspect_out="$(docker inspect "$_PT_CONTAINER_NAME" --format '{{.State.Status}} {{.RestartCount}} {{.State.StartedAt}}' 2>&1)"
+  inspect_rc=$?
+
+  local status evidence layer repair
+
+  if [[ $inspect_rc -ne 0 || -z "$inspect_out" ]]; then
+    status="CRITICAL"
+    evidence="docker inspect failed for promtail (exit=${inspect_rc}): ${inspect_out:-no output}"
+    layer="promtail-process"
+    repair="$_PT_RESTART_REPAIR"
+    result_add "PT-01" "promtail" "$status" "$evidence" "$layer" "$repair"
+    printf '%s' "$status"
+    return 0
+  fi
 
   local container_status restart_count started_at
   container_status="$(printf '%s' "$inspect_out" | awk '{print $1}')"
   restart_count="$(printf '%s' "$inspect_out" | awk '{print $2}')"
   started_at="$(printf '%s' "$inspect_out" | awk '{print $3}')"
-  [[ -z "$restart_count" ]] && restart_count=0
 
-  local status evidence layer repair
+  if [[ -z "$container_status" || ! "$restart_count" =~ ^[0-9]+$ ]]; then
+    status="CRITICAL"
+    evidence="docker inspect returned unparseable output for promtail: '${inspect_out}'"
+    layer="promtail-process"
+    repair="$_PT_RESTART_REPAIR"
+    result_add "PT-01" "promtail" "$status" "$evidence" "$layer" "$repair"
+    printf '%s' "$status"
+    return 0
+  fi
+
   if [[ "$container_status" != "running" ]]; then
     status="CRITICAL"
-    evidence="promtail container status=${container_status:-unknown}, RestartCount=${restart_count}, StartedAt=${started_at:-unknown}"
+    evidence="promtail container status=${container_status}, RestartCount=${restart_count}, StartedAt=${started_at:-unknown}"
     layer="promtail-process"
     repair="$_PT_RESTART_REPAIR"
   elif [[ "$restart_count" -ge "$_PT_RESTART_WARN_THRESHOLD" ]]; then
@@ -384,22 +427,37 @@ pt_check_06_push_errors() {
 # log_dir/log04_status are optional cross-family inputs from the LOG
 # family (same integration boundary documented in checks/logfile.sh);
 # when omitted, log_dir is derived from inventory.<env>.yaml and the
-# LOG-04-dependent verdict branches simply never fire. config_path
-# defaults to the real confirmed host path but is overridable for tests.
+# LOG-04-dependent verdict branches simply never fire. config_path, when
+# explicitly passed (4th positional arg), always wins — this is how tests
+# pin an exact path. When omitted, it's read from inventory.<env>.yaml's
+# environment.promtail_config_path (set by generate-inventory.sh; QA's
+# real Promtail config lives outside the ansible-managed path — see
+# promtail_config_path_for in generate-inventory.sh), falling back to
+# _PT_DEFAULT_CONFIG_PATH only if that inventory field is absent too.
 # ---------------------------------------------------------------------------
 run_pt_checks() {
   local env="$1"
   local log_dir="${2:-}"
   local log04_status="${3:-}"
-  local config_path="${4:-$_PT_DEFAULT_CONFIG_PATH}"
+  local config_path="${4:-}"
 
-  if [[ -z "$log_dir" ]]; then
-    local inventory_file="${PT_CONFIG_DIR}/inventory.${env}.yaml"
-    if [[ -f "$inventory_file" ]] && _pt_detect_yaml_tool; then
-      local services_base_dir
-      services_base_dir="$(_pt_env_field "$inventory_file" services_base_dir)"
-      [[ -n "$services_base_dir" ]] && log_dir="${services_base_dir}/logs"
+  local inventory_file="${PT_CONFIG_DIR}/inventory.${env}.yaml"
+  local have_inventory=false
+  if [[ -f "$inventory_file" ]] && _pt_detect_yaml_tool; then
+    have_inventory=true
+  fi
+
+  if [[ -z "$log_dir" ]] && $have_inventory; then
+    local services_base_dir
+    services_base_dir="$(_pt_env_field "$inventory_file" services_base_dir)"
+    [[ -n "$services_base_dir" ]] && log_dir="${services_base_dir}/logs"
+  fi
+
+  if [[ -z "$config_path" ]]; then
+    if $have_inventory; then
+      config_path="$(_pt_env_field "$inventory_file" promtail_config_path)"
     fi
+    [[ -z "$config_path" ]] && config_path="$_PT_DEFAULT_CONFIG_PATH"
   fi
 
   local pt01

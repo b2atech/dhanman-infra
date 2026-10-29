@@ -11,6 +11,14 @@
 #   MOCK_DOCKER_POSITIONS_MTIME PT-05, epoch seconds; unset/empty = file
 #                                missing (stat exits non-zero)
 #   MOCK_DOCKER_LOGS            PT-06 raw log content, default: empty
+#   MOCK_DOCKER_INSPECT_FAIL    PT-01/LK-01, if set to any non-empty value:
+#                                simulates `docker inspect` itself failing
+#                                (e.g. a template-parsing error or "no such
+#                                object") — prints an error to stderr and
+#                                exits 1, no status/restartcount/startedat
+#                                output at all. Only affects the
+#                                status-triplet inspect call, not the
+#                                IPAddress-format call.
 set -euo pipefail
 
 case "${1:-}" in
@@ -25,6 +33,9 @@ case "${1:-}" in
     done
     if [[ "$fmt" == *"IPAddress"* ]]; then
       printf '%s' "${MOCK_DOCKER_IP-172.18.0.2}"
+    elif [[ -n "${MOCK_DOCKER_INSPECT_FAIL:-}" ]]; then
+      echo "template parsing error: map has no entry for key \"RestartCount\"" >&2
+      exit 1
     else
       printf '%s %s %s' \
         "${MOCK_DOCKER_STATUS:-running}" \

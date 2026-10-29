@@ -70,6 +70,25 @@ loki_service_name_override_for() {
 }
 
 # ---------------------------------------------------------------------------
+# promtail_config_path_for <env_name> — per-environment Promtail config
+# file path. Not a single global literal, for the same reason as
+# loki_container_for: prod's path (/opt/monitoring/promtail/promtail-config.yml)
+# is the ansible-managed stack's own template-rendered location and is
+# PRESERVED here unverified (no live confirmation it's still correct on
+# prod — see requirement to preserve the existing default unless
+# independently verified). QA's real Promtail config lives under the same
+# unmanaged /home/ubuntu/loki-stack/ directory as its Loki container
+# (confirmed live via `find` on QA), not the ansible-managed path, which
+# doesn't exist there at all.
+# ---------------------------------------------------------------------------
+promtail_config_path_for() {
+  case "$1" in
+    qa) echo "/home/ubuntu/loki-stack/promtail-config.yaml" ;;
+    *) echo "/opt/monitoring/promtail/promtail-config.yml" ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
 log() {
@@ -291,6 +310,7 @@ generate_inventory() {
     printf '  alertmanager_url: http://127.0.0.1:%s\n' "$ALERTMANAGER_PORT"
     printf '  promtail_container: %s\n' "$PROMTAIL_CONTAINER"
     printf '  loki_container: %s\n' "$(loki_container_for "$env_name")"
+    printf '  promtail_config_path: %s\n' "$(promtail_config_path_for "$env_name")"
     printf '  monitoring_dir: %s\n' "$monitoring_dir"
   } >> "$tmp_out"
 

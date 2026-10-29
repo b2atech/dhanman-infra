@@ -203,4 +203,5 @@ environment:
   alertmanager_url: http://127.0.0.1:9093
   promtail_container: promtail
   loki_container: loki
+  promtail_config_path: /opt/monitoring/promtail/promtail-config.yml
   monitoring_dir: /opt/monitoring
