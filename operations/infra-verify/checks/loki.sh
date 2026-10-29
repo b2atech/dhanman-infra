@@ -36,7 +36,14 @@ readonly LK_CONFIG_DIR
 source "${_LK_SCRIPT_DIR}/../lib/result.sh"
 
 readonly _LK_BASE_URL="http://127.0.0.1:3100"
-readonly _LK_CONTAINER_NAME="loki"
+# Default only — the real container name is read per-environment from
+# inventory.<env>.yaml's environment.loki_container (set by
+# generate-inventory.sh). QA runs Loki from an unmanaged, separate
+# docker-compose stack (compose project "loki-stack") whose compose-default
+# container name is "loki-stack-loki-1", not the ansible-managed stack's
+# explicit "loki" (confirmed live via `docker inspect` on both qa and prod)
+# — so this name cannot be a single global constant.
+readonly _LK_DEFAULT_CONTAINER_NAME="loki"
 readonly _LK_CURL_TIMEOUT=10
 readonly _LK_FRESH_MINUTES=30
 readonly _LK_STALE_MINUTES=60
@@ -94,6 +101,42 @@ svc = data["services"][int(sys.argv[2])]
 val = svc.get(sys.argv[3])
 print(val if val is not None else "")
 ' "$file" "$index" "$field"
+  fi
+}
+
+_lk_env_field() {
+  local file="$1" field="$2"
+  if [[ "$LK_YAML_TOOL" == "yq" ]]; then
+    yq eval ".environment.${field}" "$file"
+  else
+    python3 -c '
+import sys, yaml
+with open(sys.argv[1]) as f:
+    data = yaml.safe_load(f)
+val = data.get("environment", {}).get(sys.argv[2])
+print(val if val is not None else "")
+' "$file" "$field"
+  fi
+}
+
+# loki_labels.service_name is the authoritative per-service Loki label —
+# it can differ from the "${name#dhanman-}" convention (e.g. dhanman-payment
+# actually ships to Loki as service_name=payments; see generate-inventory.sh's
+# loki_service_name_override_for). Read it directly instead of recomputing
+# short_name independently, so that override lives in exactly one place.
+_lk_loki_service_name() {
+  local file="$1" index="$2"
+  if [[ "$LK_YAML_TOOL" == "yq" ]]; then
+    yq eval ".services[${index}].loki_labels.service_name" "$file"
+  else
+    python3 -c '
+import sys, yaml
+with open(sys.argv[1]) as f:
+    data = yaml.safe_load(f)
+svc = data["services"][int(sys.argv[2])]
+val = svc.get("loki_labels", {}).get("service_name")
+print(val if val is not None else "")
+' "$file" "$index"
   fi
 }
 
@@ -172,10 +215,22 @@ validate_loki_query() {
 # ---------------------------------------------------------------------------
 # LK-01: container state and readiness. Both the container status AND the
 # /ready HTTP check must pass for LK-01 = HEALTHY.
+#
+# container_name defaults to _LK_DEFAULT_CONTAINER_NAME but should normally
+# be supplied by the caller (run_loki_checks reads it per-environment from
+# inventory.<env>.yaml's environment.loki_container).
+#
+# Inspect format uses {{.RestartCount}}, not {{.State.RestartCount}} —
+# RestartCount is a top-level docker-inspect field, not nested under
+# .State; the nested path silently evaluates to empty, which shifted the
+# space-separated fields and made restart_count read the StartedAt
+# timestamp's first token instead of the real count.
 # ---------------------------------------------------------------------------
 lk_check_01_container_ready() {
+  local container_name="${1:-$_LK_DEFAULT_CONTAINER_NAME}"
+
   local inspect_out
-  inspect_out="$(docker inspect "$_LK_CONTAINER_NAME" --format '{{.State.Status}} {{.State.RestartCount}}' 2>/dev/null || true)"
+  inspect_out="$(docker inspect "$container_name" --format '{{.State.Status}} {{.RestartCount}}' 2>/dev/null || true)"
 
   local container_status restart_count
   container_status="$(printf '%s' "$inspect_out" | awk '{print $1}')"
@@ -185,7 +240,7 @@ lk_check_01_container_ready() {
   local status evidence layer repair
   if [[ "$container_status" != "running" ]]; then
     status="CRITICAL"
-    evidence="loki container status=${container_status:-unknown}, RestartCount=${restart_count}"
+    evidence="loki container (name=${container_name}) status=${container_status:-unknown}, RestartCount=${restart_count}"
     layer="loki-process"
     repair="none"
     result_add "LK-01" "loki" "$status" "$evidence" "$layer" "$repair"
@@ -200,12 +255,12 @@ lk_check_01_container_ready() {
 
   if [[ "$http_code" == "200" && "$ready_body" == *"ready"* ]]; then
     status="HEALTHY"
-    evidence="loki container running, /ready responded 200: ${ready_body}"
+    evidence="loki container (name=${container_name}) running, /ready responded 200: ${ready_body}"
     layer="none"
     repair="none"
   else
     status="CRITICAL"
-    evidence="loki container running but /ready check failed (http_code=${http_code:-none}, body='${ready_body}')"
+    evidence="loki container (name=${container_name}) running but /ready check failed (http_code=${http_code:-none}, body='${ready_body}')"
     layer="loki-process"
     repair="none"
   fi
@@ -215,7 +270,13 @@ lk_check_01_container_ready() {
 }
 
 # ---------------------------------------------------------------------------
-# LK-02: recent logs per service
+# LK-02: recent logs per service. Uses a time-range query (start/end window),
+# not an instant query at a single point in time — an instant /query at
+# time=now evaluates the log-stream selector's state at that exact instant,
+# which for discrete log lines (not a continuous vector) only matches a line
+# landing on that precise nanosecond, so it false-WARNINGed even when logs
+# were actively arriving (confirmed live on QA: direct /loki/api/v1/query_range
+# queries returned results for streams this instant query reported empty).
 # ---------------------------------------------------------------------------
 lk_check_02_recent_logs() {
   local env="$1" name="$2" short_name="$3" lk01_status="$4"
@@ -236,14 +297,17 @@ lk_check_02_recent_logs() {
     return 0
   fi
 
-  local now_ns
+  local now_ns start_ns
   now_ns=$(( $(date +%s) * 1000000000 ))
+  start_ns=$(( now_ns - (_LK_FRESH_MINUTES * 60 * 1000000000) ))
 
   local response
-  response="$(curl --silent --max-time "$_LK_CURL_TIMEOUT" -G "${_LK_BASE_URL}/loki/api/v1/query" \
+  response="$(curl --silent --max-time "$_LK_CURL_TIMEOUT" -G "${_LK_BASE_URL}/loki/api/v1/query_range" \
     --data-urlencode "query=${query}" \
-    --data-urlencode "time=${now_ns}" \
-    --data-urlencode "limit=1" 2>/dev/null || true)"
+    --data-urlencode "start=${start_ns}" \
+    --data-urlencode "end=${now_ns}" \
+    --data-urlencode "limit=1" \
+    --data-urlencode "direction=backward" 2>/dev/null || true)"
 
   local has_results
   has_results="$(python3 -c "
@@ -259,12 +323,12 @@ except Exception:
   local status evidence layer repair
   if [[ "$has_results" == "1" ]]; then
     status="HEALTHY"
-    evidence="log entries found in Loki for {env=\"${env}\",service_name=\"${short_name}\"}"
+    evidence="log entries found in Loki for {env=\"${env}\",service_name=\"${short_name}\"} in the last ${_LK_FRESH_MINUTES}m"
     layer="none"
     repair="none"
   else
     status="WARNING"
-    evidence="No log entries found in Loki for {env=${env}, service_name=${short_name}} — check Promtail pipeline"
+    evidence="No log entries found in Loki for {env=${env}, service_name=${short_name}} in the last ${_LK_FRESH_MINUTES}m — check Promtail pipeline"
     layer="promtail-to-loki-delivery"
     repair="none"
   fi
@@ -578,8 +642,21 @@ run_loki_checks() {
   local pt04_status="${3:-}"
   local log04_status="${4:-}"
 
+  local inventory_file="${LK_CONFIG_DIR}/inventory.${env}.yaml"
+  local have_inventory=false
+  if [[ -f "$inventory_file" ]] && _lk_detect_yaml_tool; then
+    have_inventory=true
+  fi
+
+  local container_name="$_LK_DEFAULT_CONTAINER_NAME"
+  if $have_inventory; then
+    local configured_container
+    configured_container="$(_lk_env_field "$inventory_file" loki_container)"
+    [[ -n "$configured_container" ]] && container_name="$configured_container"
+  fi
+
   local lk01
-  lk01="$(lk_check_01_container_ready)"
+  lk01="$(lk_check_01_container_ready "$container_name")"
 
   local worst="HEALTHY"
   worst="$(_lk_worse_status "$worst" "$lk01")"
@@ -590,16 +667,16 @@ run_loki_checks() {
 
   local any_lk02_warning=false
   local -a short_names=()
-  local inventory_file="${LK_CONFIG_DIR}/inventory.${env}.yaml"
 
-  if [[ -f "$inventory_file" ]] && _lk_detect_yaml_tool; then
+  if $have_inventory; then
     local count
     count="$(_lk_count "$inventory_file")"
     local i
     for (( i = 0; i < count; i++ )); do
       local name short_name
       name="$(_lk_field "$inventory_file" "$i" name)"
-      short_name="${name#dhanman-}"
+      short_name="$(_lk_loki_service_name "$inventory_file" "$i")"
+      [[ -z "$short_name" ]] && short_name="${name#dhanman-}"
       short_names+=("$short_name")
 
       local lk02

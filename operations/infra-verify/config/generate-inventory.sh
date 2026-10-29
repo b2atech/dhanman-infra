@@ -36,6 +36,40 @@ readonly ALERTMANAGER_PORT=9093
 readonly PROMTAIL_CONTAINER="promtail"
 
 # ---------------------------------------------------------------------------
+# loki_container_for <env_name> — per-environment Loki container name.
+# Not a single global literal: prod runs the ansible-managed stack from
+# docker-compose.yml.j2, which sets container_name: loki explicitly
+# (confirmed live via `docker inspect loki` on prod). QA's real Loki/Grafana
+# stack is a separate, manually-created docker-compose project at
+# /home/ubuntu/loki-stack/docker-compose.yml with no container_name
+# override, so Compose's default naming produces "loki-stack-loki-1"
+# (confirmed live via `docker ps` / `docker inspect` on QA). Until QA is
+# migrated onto the ansible-managed monitoring stack, this override must
+# stay per-environment.
+# ---------------------------------------------------------------------------
+loki_container_for() {
+  case "$1" in
+    qa) echo "loki-stack-loki-1" ;;
+    *) echo "loki" ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------
+# loki_service_name_override_for <service_name> — overrides the default
+# "${name#dhanman-}" convention for services whose actual Loki
+# service_name label doesn't match. dhanman-payment ships logs with
+# service_name=payments (plural) — confirmed live on QA via
+# /loki/api/v1/label/service_name/values. Every other service's label
+# matches the convention; only documented exceptions go here.
+# ---------------------------------------------------------------------------
+loki_service_name_override_for() {
+  case "$1" in
+    dhanman-payment) echo "payments" ;;
+    *) echo "" ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
 log() {
@@ -169,6 +203,10 @@ emit_service() {
   local log_dir="${services_base_dir}/logs"
   local log_pattern="${name}-*.log"
   local short_name="${name#dhanman-}"
+  local loki_service_name_override
+  loki_service_name_override="$(loki_service_name_override_for "$name")"
+  local loki_service_name="$short_name"
+  [[ -n "$loki_service_name_override" ]] && loki_service_name="$loki_service_name_override"
 
   {
     printf '  - name: %s\n' "$name"
@@ -184,7 +222,7 @@ emit_service() {
     printf '    log_pattern: "%s"\n' "$log_pattern"
     printf '    loki_labels:\n'
     printf '      env: %s\n' "$env_name"
-    printf '      service_name: %s\n' "$short_name"
+    printf '      service_name: %s\n' "$loki_service_name"
     printf '    freshness_threshold_minutes: %s\n' "$DEFAULT_FRESHNESS_MINUTES"
     printf '    timeout_seconds: %s\n' "$DEFAULT_TIMEOUT_SECONDS"
     printf '    severity: %s\n' "$severity"
@@ -252,6 +290,7 @@ generate_inventory() {
     printf '  grafana_url: http://127.0.0.1:%s\n' "$grafana_port"
     printf '  alertmanager_url: http://127.0.0.1:%s\n' "$ALERTMANAGER_PORT"
     printf '  promtail_container: %s\n' "$PROMTAIL_CONTAINER"
+    printf '  loki_container: %s\n' "$(loki_container_for "$env_name")"
     printf '  monitoring_dir: %s\n' "$monitoring_dir"
   } >> "$tmp_out"
 

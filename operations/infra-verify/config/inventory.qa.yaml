@@ -130,7 +130,7 @@ services:
     log_pattern: "dhanman-payment-*.log"
     loki_labels:
       env: qa
-      service_name: payment
+      service_name: payments
     freshness_threshold_minutes: 30
     timeout_seconds: 5
     severity: critical
@@ -202,4 +202,5 @@ environment:
   grafana_url: http://127.0.0.1:3000
   alertmanager_url: http://127.0.0.1:9093
   promtail_container: promtail
+  loki_container: loki-stack-loki-1
   monitoring_dir: /opt/monitoring

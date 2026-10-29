@@ -41,6 +41,46 @@ teardown() {
 }
 
 # ---------------------------------------------------------------------------
+# Test 1b
+# ---------------------------------------------------------------------------
+@test "LK-01: no container_name arg defaults to _LK_DEFAULT_CONTAINER_NAME in evidence" {
+  result_init "test-lk1b" "qa"
+  export MOCK_DOCKER_STATUS="exited"
+
+  run lk_check_01_container_ready
+  [ "$status" -eq 0 ]
+
+  run python3 -c "
+import json, sys
+obj = json.loads(sys.argv[1])
+assert 'name=loki' in obj['evidence'], obj['evidence']
+print('OK')
+" "$(cat "$RESULT_FILE")"
+  [ "$status" -eq 0 ]
+  [ "$output" = "OK" ]
+}
+
+# ---------------------------------------------------------------------------
+# Test 1c
+# ---------------------------------------------------------------------------
+@test "LK-01: explicit container_name arg is used and reflected in evidence" {
+  result_init "test-lk1c" "qa"
+  export MOCK_DOCKER_STATUS="exited"
+
+  run lk_check_01_container_ready "loki-stack-loki-1"
+  [ "$status" -eq 0 ]
+
+  run python3 -c "
+import json, sys
+obj = json.loads(sys.argv[1])
+assert 'name=loki-stack-loki-1' in obj['evidence'], obj['evidence']
+print('OK')
+" "$(cat "$RESULT_FILE")"
+  [ "$status" -eq 0 ]
+  [ "$output" = "OK" ]
+}
+
+# ---------------------------------------------------------------------------
 # Test 2
 # ---------------------------------------------------------------------------
 @test "LK-01: container not running yields CRITICAL" {
@@ -94,6 +134,28 @@ import json, sys
 obj = json.loads(sys.argv[1])
 assert obj['status'] == 'WARNING'
 assert 'service_name=purchase' in obj['evidence']
+assert 'in the last' in obj['evidence']
+print('OK')
+" "$(cat "$RESULT_FILE")"
+  [ "$status" -eq 0 ]
+  [ "$output" = "OK" ]
+}
+
+# ---------------------------------------------------------------------------
+# Test 5b
+# ---------------------------------------------------------------------------
+@test "LK-02: uses a time-range query, not an instant query at a single timestamp" {
+  result_init "test-lk5b" "qa"
+  export MOCK_LOKI_BODY='{"status":"success","data":{"resultType":"streams","result":[{"stream":{},"values":[["1700000000000000000","log line"]]}]}}'
+
+  run lk_check_02_recent_logs "qa" "dhanman-purchase" "purchase" "HEALTHY"
+  [ "$status" -eq 0 ]
+  [ "$output" = "HEALTHY" ]
+
+  run python3 -c "
+import json, sys
+obj = json.loads(sys.argv[1])
+assert 'in the last 30m' in obj['evidence'], obj['evidence']
 print('OK')
 " "$(cat "$RESULT_FILE")"
   [ "$status" -eq 0 ]
@@ -288,6 +350,64 @@ print('OK')
   local layer
   layer="$(printf '%s\n' "$output" | sed -n '2p')"
   [ "$layer" = "promtail-misconfiguration" ]
+}
+
+# ---------------------------------------------------------------------------
+# Test 18b
+# ---------------------------------------------------------------------------
+@test "run_loki_checks: reads loki_container from inventory.qa.yaml for LK-01" {
+  result_init "test-lk18b" "qa"
+  export MOCK_DOCKER_STATUS="running"
+  export MOCK_LOKI_READY_BODY="ready"
+  export MOCK_LOKI_HTTP_CODE="200"
+  export MOCK_LOKI_BODY='{"status":"success","data":{"resultType":"streams","result":[{"stream":{},"values":[["1700000000000000000","log line"]]}]}}'
+
+  run run_loki_checks "qa"
+  [ "$status" -eq 0 ]
+
+  run python3 -c "
+import json, sys
+found = False
+with open(sys.argv[1]) as f:
+    for line in f:
+        r = json.loads(line)
+        if r.get('check_id') == 'LK-01':
+            assert 'name=loki-stack-loki-1' in r['evidence'], r['evidence']
+            found = True
+assert found
+print('OK')
+" "$RESULT_FILE"
+  [ "$status" -eq 0 ]
+  [ "$output" = "OK" ]
+}
+
+# ---------------------------------------------------------------------------
+# Test 18c
+# ---------------------------------------------------------------------------
+@test "run_loki_checks: dhanman-payment is queried with service_name=payments, not payment" {
+  result_init "test-lk18c" "qa"
+  export MOCK_DOCKER_STATUS="running"
+  export MOCK_LOKI_READY_BODY="ready"
+  export MOCK_LOKI_HTTP_CODE="200"
+  export MOCK_LOKI_BODY='{"status":"success","data":{"resultType":"streams","result":[{"stream":{},"values":[["1700000000000000000","log line"]]}]}}'
+
+  run run_loki_checks "qa"
+  [ "$status" -eq 0 ]
+
+  run python3 -c "
+import json, sys
+found = False
+with open(sys.argv[1]) as f:
+    for line in f:
+        r = json.loads(line)
+        if r.get('check_id') == 'LK-02' and r.get('target') == 'dhanman-payment':
+            assert 'service_name=\"payments\"' in r['evidence'], r['evidence']
+            found = True
+assert found
+print('OK')
+" "$RESULT_FILE"
+  [ "$status" -eq 0 ]
+  [ "$output" = "OK" ]
 }
 
 # ---------------------------------------------------------------------------
